@@ -153,11 +153,13 @@ fn cmd_fmt(file: &str, write_back: bool) {
 
 fn cmd_repl() {
     use clarity_lang::interpreter::builtins::register_builtins;
+    use clarity_lang::interpreter::sdl_builtins::register_sdl_builtins;
     use clarity_lang::interpreter::environment::Environment;
 
     eprintln!("Clarity REPL v0.1.0 — type expressions to evaluate, Ctrl+D to exit");
     let env = Environment::new();
     register_builtins(&env);
+    register_sdl_builtins(&env);
 
     let stdin = std::io::stdin();
     let mut line = String::new();

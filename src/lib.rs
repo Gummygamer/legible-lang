@@ -11,6 +11,7 @@ pub mod parser;
 use errors::ClarityError;
 use interpreter::environment::Environment;
 use interpreter::builtins::register_builtins;
+use interpreter::sdl_builtins::register_sdl_builtins;
 
 /// Run a Clarity source string through the full pipeline and return stdout output.
 ///
@@ -44,6 +45,7 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
     // Evaluate
     let env = Environment::new();
     register_builtins(&env);
+    register_sdl_builtins(&env);
     let mut output = Vec::new();
     interpreter::evaluate_program(&arena, root, &env, &mut output)?;
     Ok(String::from_utf8_lossy(&output).to_string())

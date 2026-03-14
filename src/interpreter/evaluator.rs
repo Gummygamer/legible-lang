@@ -175,8 +175,34 @@ fn eval_node(
         }
 
         NodeKind::ExprStatement { expr } => {
-            let val = eval_expr(arena, expr, env, output)?;
-            Ok(EvalSignal::Value(val))
+            // Delegate to eval_node so IfExpr/MatchExpr can propagate Return signals.
+            eval_node(arena, expr, env, output)
+        }
+
+        NodeKind::IfExpr {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let cond = eval_expr(arena, condition, env, output)?;
+            let branch: Option<Vec<NodeId>> = if is_truthy(&cond) {
+                Some(then_branch)
+            } else {
+                else_branch
+            };
+            if let Some(stmts) = branch {
+                let scope = Environment::with_parent(env);
+                let mut last = Value::None;
+                for stmt_id in stmts {
+                    match eval_node(arena, stmt_id, &scope, output)? {
+                        EvalSignal::Return(v) => return Ok(EvalSignal::Return(v)),
+                        EvalSignal::Value(v) => last = v,
+                    }
+                }
+                Ok(EvalSignal::Value(last))
+            } else {
+                Ok(EvalSignal::Value(Value::None))
+            }
         }
 
         NodeKind::FunctionDecl { name, .. } => {

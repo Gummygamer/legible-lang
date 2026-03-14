@@ -4,6 +4,7 @@
 pub mod builtins;
 pub mod environment;
 pub mod evaluator;
+pub mod sdl_builtins;
 pub mod value;
 
 pub use environment::{Env, Environment};
