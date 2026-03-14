@@ -1,4 +1,4 @@
-/// Parser module for the Clarity language.
+/// Parser module for the Legible language.
 ///
 /// Converts a token stream into an arena-allocated AST.
 pub mod arena;
@@ -7,7 +7,7 @@ pub mod parser;
 
 pub use arena::Arena;
 pub use ast::{
-    AstNode, BinaryOperator, ClarityType, Field, MatchArm, NodeId, NodeKind, Param, Pattern,
+    AstNode, BinaryOperator, LegibleType, Field, MatchArm, NodeId, NodeKind, Param, Pattern,
     TextPart, UnaryOperator, Variant,
 };
 pub use parser::Parser;

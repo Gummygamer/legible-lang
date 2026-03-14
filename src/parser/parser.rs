@@ -1,13 +1,13 @@
-/// Recursive descent parser for the Clarity language.
+/// Recursive descent parser for the Legible language.
 ///
 /// Converts a token stream into an arena-allocated AST.
 /// Uses Pratt parsing for expression precedence.
-use crate::errors::{ClarityError, ErrorCode, Severity, SourceLocation};
+use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
 use crate::lexer::token::{Span, SpannedToken, Token};
 use crate::parser::arena::Arena;
 use crate::parser::ast::*;
 
-/// The Clarity parser.
+/// The Legible parser.
 pub struct Parser {
     tokens: Vec<SpannedToken>,
     current: usize,
@@ -30,7 +30,7 @@ impl Parser {
     }
 
     /// Parse the entire token stream and return the root `NodeId` for the program.
-    pub fn parse_program(&mut self) -> Result<NodeId, ClarityError> {
+    pub fn parse_program(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         let mut statements = Vec::new();
         self.skip_newlines();
@@ -51,7 +51,7 @@ impl Parser {
         ))
     }
 
-    fn parse_top_level(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_top_level(&mut self) -> Result<NodeId, LegibleError> {
         match self.peek_token() {
             Token::Function => self.parse_function(false),
             Token::Public => {
@@ -72,7 +72,7 @@ impl Parser {
         }
     }
 
-    fn parse_function(&mut self, is_public: bool) -> Result<NodeId, ClarityError> {
+    fn parse_function(&mut self, is_public: bool) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::Function)?;
         let name = self.expect_identifier()?;
@@ -137,7 +137,7 @@ impl Parser {
         ))
     }
 
-    fn parse_intent_text(&mut self) -> Result<String, ClarityError> {
+    fn parse_intent_text(&mut self) -> Result<String, LegibleError> {
         let mut parts = Vec::new();
         while !self.check(&Token::Newline) && !self.check(&Token::Eof) {
             let tok = &self.tokens[self.current].token;
@@ -202,7 +202,7 @@ impl Parser {
         Ok(parts.join(" "))
     }
 
-    fn parse_param_list(&mut self) -> Result<Vec<Param>, ClarityError> {
+    fn parse_param_list(&mut self) -> Result<Vec<Param>, LegibleError> {
         let mut params = Vec::new();
         if self.check(&Token::RightParen) {
             return Ok(params);
@@ -219,7 +219,7 @@ impl Parser {
         Ok(params)
     }
 
-    fn parse_expression_list(&mut self) -> Result<Vec<NodeId>, ClarityError> {
+    fn parse_expression_list(&mut self) -> Result<Vec<NodeId>, LegibleError> {
         let mut exprs = Vec::new();
         loop {
             let expr = self.parse_expression()?;
@@ -232,7 +232,7 @@ impl Parser {
         Ok(exprs)
     }
 
-    fn parse_record(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_record(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::Record)?;
         let name = self.expect_identifier()?;
@@ -261,7 +261,7 @@ impl Parser {
         ))
     }
 
-    fn parse_union(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_union(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::Union)?;
         let name = self.expect_identifier()?;
@@ -303,7 +303,7 @@ impl Parser {
         ))
     }
 
-    fn parse_use(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_use(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::Use)?;
         let module_name = self.expect_identifier()?;
@@ -318,7 +318,7 @@ impl Parser {
         ))
     }
 
-    fn parse_statement(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_statement(&mut self) -> Result<NodeId, LegibleError> {
         match self.peek_token() {
             Token::Let => self.parse_let(false),
             Token::Mutable => self.parse_let(true),
@@ -336,7 +336,7 @@ impl Parser {
         }
     }
 
-    fn parse_let(&mut self, mutable: bool) -> Result<NodeId, ClarityError> {
+    fn parse_let(&mut self, mutable: bool) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         if mutable {
             self.expect(&Token::Mutable)?;
@@ -364,7 +364,7 @@ impl Parser {
         ))
     }
 
-    fn parse_set(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_set(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::Set)?;
         let name = self.expect_identifier()?;
@@ -381,7 +381,7 @@ impl Parser {
         ))
     }
 
-    fn parse_for(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_for(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::For)?;
         let binding = self.expect_identifier()?;
@@ -406,7 +406,7 @@ impl Parser {
         ))
     }
 
-    fn parse_while(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_while(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::While)?;
         let condition = self.parse_expression()?;
@@ -425,7 +425,7 @@ impl Parser {
         ))
     }
 
-    fn parse_return(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_return(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::Return)?;
         let value = if self.check(&Token::Newline) || self.check(&Token::Eof) || self.check(&Token::End) {
@@ -448,7 +448,7 @@ impl Parser {
         ))
     }
 
-    fn parse_body(&mut self) -> Result<Vec<NodeId>, ClarityError> {
+    fn parse_body(&mut self) -> Result<Vec<NodeId>, LegibleError> {
         let mut stmts = Vec::new();
         while !self.check(&Token::End)
             && !self.check(&Token::Else)
@@ -465,11 +465,11 @@ impl Parser {
 
     // ─── Expression Parsing (Pratt) ─────────────────────────
 
-    fn parse_expression(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_expression(&mut self) -> Result<NodeId, LegibleError> {
         self.parse_pipeline()
     }
 
-    fn parse_pipeline(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_pipeline(&mut self) -> Result<NodeId, LegibleError> {
         let mut left = self.parse_or()?;
         loop {
             // Allow |> after newlines (pipeline continuation)
@@ -490,7 +490,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_or(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_or(&mut self) -> Result<NodeId, LegibleError> {
         let mut left = self.parse_and()?;
         while self.match_token(&Token::Or) {
             self.skip_newlines();
@@ -511,7 +511,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_and(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_and(&mut self) -> Result<NodeId, LegibleError> {
         let mut left = self.parse_equality()?;
         while self.match_token(&Token::And) {
             self.skip_newlines();
@@ -532,7 +532,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_equality(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_equality(&mut self) -> Result<NodeId, LegibleError> {
         let mut left = self.parse_comparison()?;
         loop {
             let op = if self.match_token(&Token::Equals) {
@@ -553,7 +553,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_comparison(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_comparison(&mut self) -> Result<NodeId, LegibleError> {
         let mut left = self.parse_concat()?;
         loop {
             let op = if self.match_token(&Token::Greater) {
@@ -578,7 +578,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_concat(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_concat(&mut self) -> Result<NodeId, LegibleError> {
         let mut left = self.parse_addition()?;
         while self.match_token(&Token::PlusPlus) {
             self.skip_newlines();
@@ -599,7 +599,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_addition(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_addition(&mut self) -> Result<NodeId, LegibleError> {
         let mut left = self.parse_multiplication()?;
         loop {
             let op = if self.match_token(&Token::Plus) {
@@ -620,7 +620,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_multiplication(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_multiplication(&mut self) -> Result<NodeId, LegibleError> {
         let mut left = self.parse_unary()?;
         loop {
             let op = if self.match_token(&Token::Star) {
@@ -643,7 +643,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_unary(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_unary(&mut self) -> Result<NodeId, LegibleError> {
         if self.match_token(&Token::Minus) {
             let start_span = self.previous_span();
             let operand = self.parse_unary()?;
@@ -677,7 +677,7 @@ impl Parser {
         self.parse_postfix()
     }
 
-    fn parse_postfix(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_postfix(&mut self) -> Result<NodeId, LegibleError> {
         let mut expr = self.parse_primary()?;
         loop {
             if self.match_token(&Token::Dot) {
@@ -792,7 +792,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn parse_primary(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_primary(&mut self) -> Result<NodeId, LegibleError> {
         let span = self.current_span();
         match self.peek_token() {
             Token::Integer(n) => {
@@ -888,7 +888,7 @@ impl Parser {
         }
     }
 
-    fn parse_list_literal(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_list_literal(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::LeftBracket)?;
         let mut elements = Vec::new();
@@ -914,7 +914,7 @@ impl Parser {
         ))
     }
 
-    fn parse_mapping_literal(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_mapping_literal(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::LeftBrace)?;
         let mut entries = Vec::new();
@@ -942,7 +942,7 @@ impl Parser {
         ))
     }
 
-    fn parse_if_expression(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_if_expression(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::If)?;
         let condition = self.parse_expression()?;
@@ -987,7 +987,7 @@ impl Parser {
         ))
     }
 
-    fn parse_match_expression(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_match_expression(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::Match)?;
         let subject = self.parse_expression()?;
@@ -1026,7 +1026,7 @@ impl Parser {
         ))
     }
 
-    fn parse_match_arm_body(&mut self) -> Result<Vec<NodeId>, ClarityError> {
+    fn parse_match_arm_body(&mut self) -> Result<Vec<NodeId>, LegibleError> {
         let mut stmts = Vec::new();
         while !self.check(&Token::When)
             && !self.check(&Token::Otherwise)
@@ -1040,7 +1040,7 @@ impl Parser {
         Ok(stmts)
     }
 
-    fn parse_pattern(&mut self) -> Result<Pattern, ClarityError> {
+    fn parse_pattern(&mut self) -> Result<Pattern, LegibleError> {
         match self.peek_token() {
             Token::Integer(_)
             | Token::Decimal(_)
@@ -1085,7 +1085,7 @@ impl Parser {
         }
     }
 
-    fn parse_lambda(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_lambda(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::Fn)?;
         self.expect(&Token::LeftParen)?;
@@ -1110,7 +1110,7 @@ impl Parser {
         ))
     }
 
-    fn parse_interpolated_string(&mut self) -> Result<NodeId, ClarityError> {
+    fn parse_interpolated_string(&mut self) -> Result<NodeId, LegibleError> {
         let start_span = self.current_span();
         self.expect(&Token::InterpolationStart)?;
         let mut parts = Vec::new();
@@ -1150,39 +1150,39 @@ impl Parser {
 
     // ─── Type Parsing ───────────────────────────────────────
 
-    fn parse_type(&mut self) -> Result<ClarityType, ClarityError> {
+    fn parse_type(&mut self) -> Result<LegibleType, LegibleError> {
         match self.peek_token() {
             Token::IntegerType => {
                 self.advance();
-                Ok(ClarityType::Integer)
+                Ok(LegibleType::Integer)
             }
             Token::DecimalType => {
                 self.advance();
-                Ok(ClarityType::Decimal)
+                Ok(LegibleType::Decimal)
             }
             Token::TextType => {
                 self.advance();
-                Ok(ClarityType::Text)
+                Ok(LegibleType::Text)
             }
             Token::BooleanType => {
                 self.advance();
-                Ok(ClarityType::Boolean)
+                Ok(LegibleType::Boolean)
             }
             Token::NothingType => {
                 self.advance();
-                Ok(ClarityType::Nothing)
+                Ok(LegibleType::Nothing)
             }
             Token::AListOf => {
                 self.advance();
                 let inner = self.parse_type()?;
-                Ok(ClarityType::ListOf(Box::new(inner)))
+                Ok(LegibleType::ListOf(Box::new(inner)))
             }
             Token::AMappingFrom => {
                 self.advance();
                 let key_type = self.parse_type()?;
                 self.expect(&Token::To)?;
                 let value_type = self.parse_type()?;
-                Ok(ClarityType::MappingFrom(
+                Ok(LegibleType::MappingFrom(
                     Box::new(key_type),
                     Box::new(value_type),
                 ))
@@ -1190,7 +1190,7 @@ impl Parser {
             Token::AnOptional => {
                 self.advance();
                 let inner = self.parse_type()?;
-                Ok(ClarityType::Optional(Box::new(inner)))
+                Ok(LegibleType::Optional(Box::new(inner)))
             }
             Token::Fn => {
                 self.advance();
@@ -1208,7 +1208,7 @@ impl Parser {
                 self.expect(&Token::RightParen)?;
                 self.expect(&Token::Colon)?;
                 let return_type = self.parse_type()?;
-                Ok(ClarityType::Function {
+                Ok(LegibleType::Function {
                     params,
                     return_type: Box::new(return_type),
                 })
@@ -1216,7 +1216,7 @@ impl Parser {
             Token::Identifier(name) => {
                 let name = name;
                 self.advance();
-                Ok(ClarityType::Named(name))
+                Ok(LegibleType::Named(name))
             }
             _ => Err(self.error_at_current(
                 &format!("Expected a type, got {:?}", self.peek_token()),
@@ -1243,7 +1243,7 @@ impl Parser {
         matches!(self.peek_token(), Token::InterpolationEnd)
     }
 
-    fn expect_interpolation_expr_end(&mut self) -> Result<(), ClarityError> {
+    fn expect_interpolation_expr_end(&mut self) -> Result<(), LegibleError> {
         if matches!(self.peek_token(), Token::InterpolationExprEnd) {
             self.advance();
             Ok(())
@@ -1271,7 +1271,7 @@ impl Parser {
         &self.tokens[self.current - 1]
     }
 
-    fn expect(&mut self, token: &Token) -> Result<(), ClarityError> {
+    fn expect(&mut self, token: &Token) -> Result<(), LegibleError> {
         if self.check(token) {
             self.advance();
             Ok(())
@@ -1283,7 +1283,7 @@ impl Parser {
         }
     }
 
-    fn expect_identifier(&mut self) -> Result<String, ClarityError> {
+    fn expect_identifier(&mut self) -> Result<String, LegibleError> {
         match self.peek_token() {
             Token::Identifier(name) => {
                 self.advance();
@@ -1318,11 +1318,11 @@ impl Parser {
         }
     }
 
-    fn error_at_current(&self, message: &str, suggestion: &str) -> ClarityError {
+    fn error_at_current(&self, message: &str, suggestion: &str) -> LegibleError {
         let span = self.current_span();
         let (line, column) =
             crate::errors::reporter::offset_to_line_col(&self.source, span.start);
-        ClarityError {
+        LegibleError {
             code: ErrorCode::UnexpectedToken,
             severity: Severity::Error,
             location: SourceLocation {
@@ -1365,7 +1365,7 @@ mod tests {
             } = &arena.get(statements[0]).kind
             {
                 assert_eq!(name, "x");
-                assert_eq!(*declared_type, ClarityType::Integer);
+                assert_eq!(*declared_type, LegibleType::Integer);
                 assert!(!mutable);
             } else {
                 panic!("Expected LetBinding");
@@ -1455,7 +1455,7 @@ mod tests {
         if let NodeKind::Program { statements } = &prog.kind {
             assert_eq!(statements.len(), 1);
             if let NodeKind::LetBinding { declared_type, .. } = &arena.get(statements[0]).kind {
-                assert_eq!(*declared_type, ClarityType::ListOf(Box::new(ClarityType::Integer)));
+                assert_eq!(*declared_type, LegibleType::ListOf(Box::new(LegibleType::Integer)));
             } else {
                 panic!("Expected LetBinding");
             }

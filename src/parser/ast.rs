@@ -1,4 +1,4 @@
-/// AST node types for the Clarity language.
+/// AST node types for the Legible language.
 ///
 /// All nodes are arena-allocated and referenced by `NodeId`.
 use crate::lexer::Span;
@@ -27,7 +27,7 @@ pub enum NodeKind {
     FunctionDecl {
         name: String,
         params: Vec<Param>,
-        return_type: ClarityType,
+        return_type: LegibleType,
         intent: String,
         requires: Vec<NodeId>,
         ensures: Vec<NodeId>,
@@ -46,7 +46,7 @@ pub enum NodeKind {
     // Statements
     LetBinding {
         name: String,
-        declared_type: ClarityType,
+        declared_type: LegibleType,
         value: NodeId,
         mutable: bool,
     },
@@ -96,7 +96,7 @@ pub enum NodeKind {
     },
     Lambda {
         params: Vec<Param>,
-        return_type: ClarityType,
+        return_type: LegibleType,
         body: NodeId,
     },
     Pipeline {
@@ -143,14 +143,14 @@ pub enum NodeKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,
-    pub param_type: ClarityType,
+    pub param_type: LegibleType,
 }
 
 /// A record field definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Field {
     pub name: String,
-    pub field_type: ClarityType,
+    pub field_type: LegibleType,
 }
 
 /// A union variant definition.
@@ -185,21 +185,21 @@ pub enum TextPart {
     Interpolation(NodeId),
 }
 
-/// Clarity type system representation.
+/// Legible type system representation.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ClarityType {
+pub enum LegibleType {
     Integer,
     Decimal,
     Text,
     Boolean,
     Nothing,
-    ListOf(Box<ClarityType>),
-    MappingFrom(Box<ClarityType>, Box<ClarityType>),
-    Optional(Box<ClarityType>),
+    ListOf(Box<LegibleType>),
+    MappingFrom(Box<LegibleType>, Box<LegibleType>),
+    Optional(Box<LegibleType>),
     Named(String),
     Function {
-        params: Vec<ClarityType>,
-        return_type: Box<ClarityType>,
+        params: Vec<LegibleType>,
+        return_type: Box<LegibleType>,
     },
     Generic(String),
 }

@@ -1,4 +1,4 @@
-/// Static analysis passes for the Clarity language.
+/// Static analysis passes for the Legible language.
 pub mod contracts;
 pub mod intent;
 pub mod typechecker;

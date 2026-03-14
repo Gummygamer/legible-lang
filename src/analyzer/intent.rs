@@ -1,8 +1,8 @@
-/// Intent verification for the Clarity language.
+/// Intent verification for the Legible language.
 ///
 /// Uses heuristic keyword matching to verify that a function's intent
 /// description is consistent with its body.
-use crate::errors::{ClarityError, ErrorCode, Severity, SourceLocation};
+use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
 use crate::parser::arena::Arena;
 use crate::parser::ast::*;
 
@@ -20,7 +20,7 @@ const GENERIC_KEYWORDS: &[&str] = &[
 ];
 
 /// Verify the intent of all functions in the AST. Returns warnings for mismatches.
-pub fn verify_intents(arena: &Arena, root: NodeId) -> Vec<ClarityError> {
+pub fn verify_intents(arena: &Arena, root: NodeId) -> Vec<LegibleError> {
     let mut warnings = Vec::new();
     if let NodeKind::Program { ref statements } = arena.get(root).kind {
         for &stmt_id in statements {
@@ -45,7 +45,7 @@ fn check_intent(
     function_name: &str,
     intent: &str,
     body: &[NodeId],
-) -> Option<ClarityError> {
+) -> Option<LegibleError> {
     let intent_keywords = tokenize_intent(intent);
     if intent_keywords.is_empty() {
         return None;
@@ -70,7 +70,7 @@ fn check_intent(
 
     let match_ratio = matched as f64 / non_generic.len() as f64;
     if match_ratio < 0.3 {
-        Some(ClarityError {
+        Some(LegibleError {
             code: ErrorCode::IntentMismatch,
             severity: Severity::Warning,
             location: SourceLocation::unknown(),

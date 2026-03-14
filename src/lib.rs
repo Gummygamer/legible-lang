@@ -1,4 +1,4 @@
-/// Clarity language interpreter library.
+/// Legible language interpreter library.
 ///
 /// Re-exports all modules for testing and embedding.
 pub mod analyzer;
@@ -8,20 +8,20 @@ pub mod interpreter;
 pub mod lexer;
 pub mod parser;
 
-use errors::ClarityError;
+use errors::LegibleError;
 use interpreter::environment::Environment;
 use interpreter::builtins::register_builtins;
 use interpreter::sdl_builtins::register_sdl_builtins;
 
-/// Run a Clarity source string through the full pipeline and return stdout output.
+/// Run a Legible source string through the full pipeline and return stdout output.
 ///
 /// This is the primary entry point for tests and benchmarks.
-pub fn run_source(source: &str) -> Result<String, ClarityError> {
+pub fn run_source(source: &str) -> Result<String, LegibleError> {
     run_source_with_filename(source, "<input>")
 }
 
-/// Run a Clarity source string with a given filename for error reporting.
-pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, ClarityError> {
+/// Run a Legible source string with a given filename for error reporting.
+pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, LegibleError> {
     let tokens = lexer::scan(source)?;
     let mut parser = parser::Parser::new(tokens, filename, source);
     let root = parser.parse_program()?;

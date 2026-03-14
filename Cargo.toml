@@ -1,8 +1,12 @@
 [package]
-name = "clarity-lang"
+name = "legible-lang"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
+
+[[bin]]
+name = "legible"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

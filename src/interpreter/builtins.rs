@@ -1,11 +1,11 @@
-/// Built-in functions for the Clarity standard library.
-use crate::errors::{ClarityError, ErrorCode, Severity, SourceLocation};
+/// Built-in functions for the Legible standard library.
+use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
 use crate::interpreter::environment::Env;
 use crate::interpreter::value::{Callable, Value};
 
 /// Register all built-in functions in the given environment.
 pub fn register_builtins(env: &Env) {
-    let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, ClarityError>)> = vec![
+    let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, LegibleError>)> = vec![
         // I/O (print handled specially in evaluator)
         ("read_line", builtin_read_line),
         // List operations
@@ -70,8 +70,8 @@ pub fn register_builtins(env: &Env) {
     );
 }
 
-fn builtin_error(message: &str, suggestion: &str) -> ClarityError {
-    ClarityError {
+fn builtin_error(message: &str, suggestion: &str) -> LegibleError {
+    LegibleError {
         code: ErrorCode::Syntax,
         severity: Severity::Error,
         location: SourceLocation::unknown(),
@@ -81,12 +81,12 @@ fn builtin_error(message: &str, suggestion: &str) -> ClarityError {
     }
 }
 
-fn builtin_print_placeholder(_args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_print_placeholder(_args: &[Value]) -> Result<Value, LegibleError> {
     // This should never be called directly; the evaluator intercepts print calls.
     Ok(Value::None)
 }
 
-fn builtin_read_line(_args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_read_line(_args: &[Value]) -> Result<Value, LegibleError> {
     let mut line = String::new();
     std::io::stdin()
         .read_line(&mut line)
@@ -94,7 +94,7 @@ fn builtin_read_line(_args: &[Value]) -> Result<Value, ClarityError> {
     Ok(Value::Text(line.trim_end_matches('\n').to_string()))
 }
 
-fn builtin_length(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_length(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::List(items)) => Ok(Value::Integer(items.len() as i64)),
         Some(Value::Text(s)) => Ok(Value::Integer(s.len() as i64)),
@@ -106,7 +106,7 @@ fn builtin_length(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_append(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_append(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("append() expects 2 arguments", "Usage: append(list, item)"));
     }
@@ -120,7 +120,7 @@ fn builtin_append(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_concat_list(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_concat_list(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("concat() expects 2 arguments", "Usage: concat(list_a, list_b)"));
     }
@@ -134,7 +134,7 @@ fn builtin_concat_list(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_contains(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_contains(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("contains() expects 2 arguments", "Usage: contains(list, item)"));
     }
@@ -144,7 +144,7 @@ fn builtin_contains(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_range(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_range(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("range() expects 2 arguments", "Usage: range(start, end_exclusive)"));
     }
@@ -157,7 +157,7 @@ fn builtin_range(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_split(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_split(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("split() expects 2 arguments", "Usage: split(str, delimiter)"));
     }
@@ -170,7 +170,7 @@ fn builtin_split(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_join(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_join(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("join() expects 2 arguments", "Usage: join(parts, separator)"));
     }
@@ -189,28 +189,28 @@ fn builtin_join(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_trim(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_trim(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Text(s)) => Ok(Value::Text(s.trim().to_string())),
         _ => Err(builtin_error("trim() expects text", "Pass a text value")),
     }
 }
 
-fn builtin_uppercase(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_uppercase(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Text(s)) => Ok(Value::Text(s.to_uppercase())),
         _ => Err(builtin_error("uppercase() expects text", "Pass a text value")),
     }
 }
 
-fn builtin_lowercase(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_lowercase(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Text(s)) => Ok(Value::Text(s.to_lowercase())),
         _ => Err(builtin_error("lowercase() expects text", "Pass a text value")),
     }
 }
 
-fn builtin_starts_with(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_starts_with(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("starts_with() expects 2 arguments", "Usage: starts_with(str, prefix)"));
     }
@@ -220,7 +220,7 @@ fn builtin_starts_with(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_ends_with(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_ends_with(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("ends_with() expects 2 arguments", "Usage: ends_with(str, suffix)"));
     }
@@ -230,21 +230,21 @@ fn builtin_ends_with(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_text_length(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_text_length(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Text(s)) => Ok(Value::Integer(s.len() as i64)),
         _ => Err(builtin_error("text_length() expects text", "Pass a text value")),
     }
 }
 
-fn builtin_to_text(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_to_text(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(v) => Ok(Value::Text(v.to_string())),
         _ => Err(builtin_error("to_text() expects 1 argument", "Pass a value to convert")),
     }
 }
 
-fn builtin_keys(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_keys(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Mapping(entries)) => {
             let keys: Vec<Value> = entries.iter().map(|(k, _)| k.clone()).collect();
@@ -254,7 +254,7 @@ fn builtin_keys(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_values(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_values(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Mapping(entries)) => {
             let vals: Vec<Value> = entries.iter().map(|(_, v)| v.clone()).collect();
@@ -264,7 +264,7 @@ fn builtin_values(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_has_key(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_has_key(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("has_key() expects 2 arguments", "Usage: has_key(map, key)"));
     }
@@ -277,7 +277,7 @@ fn builtin_has_key(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_get(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_get(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("get() expects 2 arguments", "Usage: get(map, key)"));
     }
@@ -294,7 +294,7 @@ fn builtin_get(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_put(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_put(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 3 {
         return Err(builtin_error("put() expects 3 arguments", "Usage: put(map, key, value)"));
     }
@@ -319,9 +319,9 @@ fn builtin_put(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_unwrap(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_unwrap(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
-        Some(Value::None) => Err(ClarityError {
+        Some(Value::None) => Err(LegibleError {
             code: ErrorCode::UnwrapNone,
             severity: Severity::Error,
             location: SourceLocation::unknown(),
@@ -334,7 +334,7 @@ fn builtin_unwrap(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_unwrap_or(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_unwrap_or(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("unwrap_or() expects 2 arguments", "Usage: unwrap_or(opt, default)"));
     }
@@ -344,7 +344,7 @@ fn builtin_unwrap_or(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_is_some(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_is_some(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::None) => Ok(Value::Boolean(false)),
         Some(_) => Ok(Value::Boolean(true)),
@@ -352,7 +352,7 @@ fn builtin_is_some(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_is_none(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_is_none(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::None) => Ok(Value::Boolean(true)),
         Some(_) => Ok(Value::Boolean(false)),
@@ -360,7 +360,7 @@ fn builtin_is_none(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_abs(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_abs(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Decimal(n)) => Ok(Value::Decimal(n.abs())),
         Some(Value::Integer(n)) => Ok(Value::Decimal((*n as f64).abs())),
@@ -368,7 +368,7 @@ fn builtin_abs(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_max(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_max(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("max() expects 2 arguments", "Usage: max(a, b)"));
     }
@@ -382,7 +382,7 @@ fn builtin_max(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_min(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_min(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("min() expects 2 arguments", "Usage: min(a, b)"));
     }
@@ -396,7 +396,7 @@ fn builtin_min(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_floor(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_floor(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Decimal(n)) => Ok(Value::Integer(n.floor() as i64)),
         Some(Value::Integer(n)) => Ok(Value::Integer(*n)),
@@ -404,7 +404,7 @@ fn builtin_floor(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_ceil(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_ceil(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Decimal(n)) => Ok(Value::Integer(n.ceil() as i64)),
         Some(Value::Integer(n)) => Ok(Value::Integer(*n)),
@@ -412,7 +412,7 @@ fn builtin_ceil(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_round(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_round(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Decimal(n)) => Ok(Value::Integer(n.round() as i64)),
         Some(Value::Integer(n)) => Ok(Value::Integer(*n)),
@@ -420,7 +420,7 @@ fn builtin_round(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_to_integer(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_to_integer(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Text(s)) => match s.parse::<i64>() {
             Ok(n) => Ok(Value::Integer(n)),
@@ -432,7 +432,7 @@ fn builtin_to_integer(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn builtin_to_decimal(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_to_decimal(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Text(s)) => match s.parse::<f64>() {
             Ok(n) => Ok(Value::Decimal(n)),

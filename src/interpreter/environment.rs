@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::errors::{ClarityError, ErrorCode, Severity, SourceLocation};
+use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
 use crate::interpreter::value::Value;
 
 /// A reference-counted, mutable environment.
@@ -53,10 +53,10 @@ impl Environment {
 
     /// Reassign a mutable binding. Returns an error if the name is not found
     /// or the binding is immutable.
-    pub fn set(&mut self, name: &str, value: Value) -> Result<(), ClarityError> {
+    pub fn set(&mut self, name: &str, value: Value) -> Result<(), LegibleError> {
         if let Some(binding) = self.bindings.get_mut(name) {
             if !binding.1 {
-                return Err(ClarityError {
+                return Err(LegibleError {
                     code: ErrorCode::ImmutableReassign,
                     severity: Severity::Error,
                     location: SourceLocation::unknown(),
@@ -70,7 +70,7 @@ impl Environment {
         } else if let Some(parent) = &self.parent {
             parent.borrow_mut().set(name, value)
         } else {
-            Err(ClarityError {
+            Err(LegibleError {
                 code: ErrorCode::UndefinedVariable,
                 severity: Severity::Error,
                 location: SourceLocation::unknown(),

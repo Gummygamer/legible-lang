@@ -1,4 +1,4 @@
-/// Interpreter module for the Clarity language.
+/// Interpreter module for the Legible language.
 ///
 /// Tree-walking evaluator with scope-chained environments.
 pub mod builtins;

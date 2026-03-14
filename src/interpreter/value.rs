@@ -1,11 +1,11 @@
-/// Runtime value types for the Clarity interpreter.
+/// Runtime value types for the Legible interpreter.
 use std::fmt;
 
-use crate::errors::ClarityError;
+use crate::errors::LegibleError;
 use crate::interpreter::environment::Env;
 use crate::parser::ast::{NodeId, Param};
 
-/// A runtime value in Clarity.
+/// A runtime value in Legible.
 #[derive(Debug, Clone)]
 pub enum Value {
     Integer(i64),
@@ -139,7 +139,7 @@ pub enum Callable {
     },
     Builtin {
         name: String,
-        func: fn(&[Value]) -> Result<Value, ClarityError>,
+        func: fn(&[Value]) -> Result<Value, LegibleError>,
     },
 }
 

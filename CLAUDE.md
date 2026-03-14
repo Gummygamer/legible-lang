@@ -1,16 +1,16 @@
-# CLAUDE.md — Clarity Language Interpreter
+# CLAUDE.md — Legible Language Interpreter
 
 ## Project Overview
 
-You are building an **interpreter** for **Clarity**, a programming language designed to be optimal for LLMs to write, read, and reason about. The interpreter is written in **Rust** (edition 2021, stable toolchain).
+You are building an **interpreter** for **Legible**, a programming language designed to be optimal for LLMs to write, read, and reason about. The interpreter is written in **Rust** (edition 2021, stable toolchain).
 
-The project name is `clarity-lang`. It is a single Cargo binary crate invoked as:
+The project name is `legible-lang`. It is a single Cargo binary crate invoked as:
 
 ```bash
-clarity run <file.clar>
-clarity check <file.clar>     # typecheck + intent verification only
-clarity fmt <file.clar>        # canonical formatter (stdout or --write)
-clarity repl                 # interactive REPL
+legible run <file.lbl>
+legible check <file.lbl>     # typecheck + intent verification only
+legible fmt <file.lbl>        # canonical formatter (stdout or --write)
+legible repl                 # interactive REPL
 ```
 
 ---
@@ -18,7 +18,7 @@ clarity repl                 # interactive REPL
 ## Architecture
 
 ```
-clarity-lang/
+legible-lang/
 ├── Cargo.toml
 ├── src/
 │   ├── main.rs                 # CLI entry point (clap)
@@ -50,20 +50,20 @@ clarity-lang/
 │       ├── mod.rs
 │       └── reporter.rs         # Structured JSON error output
 ├── tests/
-│   ├── integration.rs          # End-to-end .clar file tests
+│   ├── integration.rs          # End-to-end .lbl file tests
 │   └── fixtures/
 │       ├── valid/
-│       │   ├── hello.clar
+│       │   ├── hello.lbl
 │       │   ├── hello.expected
-│       │   ├── fizzbuzz.clar
+│       │   ├── fizzbuzz.lbl
 │       │   ├── fizzbuzz.expected
-│       │   ├── pipelines.clar
+│       │   ├── pipelines.lbl
 │       │   ├── pipelines.expected
-│       │   ├── contracts.clar
+│       │   ├── contracts.lbl
 │       │   ├── contracts.expected
 │       │   └── ...
 │       └── errors/
-│           ├── type_mismatch.clar
+│           ├── type_mismatch.lbl
 │           ├── type_mismatch.error.json
 │           └── ...
 └── benches/
@@ -91,7 +91,7 @@ Do **not** add runtime dependencies beyond these without justification. No async
 
 ```toml
 [package]
-name = "clarity-lang"
+name = "legible-lang"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
@@ -251,7 +251,7 @@ pub enum NodeKind {
     FunctionDecl {
         name: String,
         params: Vec<Param>,
-        return_type: ClarityType,
+        return_type: LegibleType,
         intent: String,
         requires: Vec<NodeId>,
         ensures: Vec<NodeId>,
@@ -270,7 +270,7 @@ pub enum NodeKind {
     // Statements
     LetBinding {
         name: String,
-        declared_type: ClarityType,
+        declared_type: LegibleType,
         value: NodeId,
         mutable: bool,
     },
@@ -304,7 +304,7 @@ pub enum NodeKind {
     FunctionCall { callee: NodeId, arguments: Vec<NodeId> },
     Lambda {
         params: Vec<Param>,
-        return_type: ClarityType,
+        return_type: LegibleType,
         body: NodeId,
     },
     Pipeline { left: NodeId, right: NodeId },
@@ -342,13 +342,13 @@ pub enum NodeKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,
-    pub param_type: ClarityType,
+    pub param_type: LegibleType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Field {
     pub name: String,
-    pub field_type: ClarityType,
+    pub field_type: LegibleType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -377,19 +377,19 @@ pub enum TextPart {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ClarityType {
+pub enum LegibleType {
     Integer,
     Decimal,
     Text,
     Boolean,
     Nothing,
-    ListOf(Box<ClarityType>),
-    MappingFrom(Box<ClarityType>, Box<ClarityType>),
-    Optional(Box<ClarityType>),
+    ListOf(Box<LegibleType>),
+    MappingFrom(Box<LegibleType>, Box<LegibleType>),
+    Optional(Box<LegibleType>),
     Named(String),
     Function {
-        params: Vec<ClarityType>,
-        return_type: Box<ClarityType>,
+        params: Vec<LegibleType>,
+        return_type: Box<LegibleType>,
     },
     Generic(String),  // for builtins: T, U, K, V
 }
@@ -437,7 +437,7 @@ pub enum Callable {
     UserDefined {
         name: String,
         params: Vec<Param>,
-        return_type: ClarityType,
+        return_type: LegibleType,
         intent: String,
         requires: Vec<NodeId>,
         ensures: Vec<NodeId>,
@@ -446,13 +446,13 @@ pub enum Callable {
     },
     Lambda {
         params: Vec<Param>,
-        return_type: ClarityType,
+        return_type: LegibleType,
         body: NodeId,
         closure_env: Env,
     },
     Builtin {
         name: String,
-        func: fn(&[Value]) -> Result<Value, ClarityError>,
+        func: fn(&[Value]) -> Result<Value, LegibleError>,
     },
 }
 ```
@@ -491,7 +491,7 @@ impl Environment {
 
     pub fn define(&mut self, name: String, value: Value, mutable: bool) { ... }
     pub fn get(&self, name: &str) -> Option<(Value, bool)> { ... }  // walk chain
-    pub fn set(&mut self, name: &str, value: Value) -> Result<(), ClarityError> { ... }
+    pub fn set(&mut self, name: &str, value: Value) -> Result<(), LegibleError> { ... }
 }
 ```
 
@@ -501,7 +501,7 @@ impl Environment {
 
 ### File Extension
 
-`.clar`
+`.lbl`
 
 ### Comments
 
@@ -513,9 +513,9 @@ No block comments. One comment style only (canonical form principle).
 
 ### Primitive Types
 
-Clarity uses verbose, natural-language-style type names:
+Legible uses verbose, natural-language-style type names:
 
-| Clarity Type              | Rust Representation              |
+| Legible Type              | Rust Representation              |
 |---------------------------|----------------------------------|
 | `integer`                 | `i64`                            |
 | `decimal`                 | `f64`                            |
@@ -578,7 +578,7 @@ end
 
 ### Control Flow
 
-Clarity uses **flat, keyword-delimited** control flow. No curly braces. No parentheses around conditions.
+Legible uses **flat, keyword-delimited** control flow. No curly braces. No parentheses around conditions.
 
 **If/else:**
 
@@ -701,10 +701,10 @@ No bitwise operators. No ternary operator (use `if/then/else`).
 
 ### Modules
 
-Each `.clar` file is a module. The filename is the module name.
+Each `.lbl` file is a module. The filename is the module name.
 
 ```
--- in math_utils.clar
+-- in math_utils.lbl
 public function add(a: integer, b: integer): integer
   intent: return the sum of two integers
   return a + b
@@ -712,7 +712,7 @@ end
 ```
 
 ```
--- in main.clar
+-- in main.lbl
 use math_utils
 
 let result: integer = math_utils.add(1, 2)
@@ -732,7 +732,7 @@ Implement in `builtins.rs`. Each builtin is registered as a `Callable::Builtin` 
 
 ```rust
 fn register_builtins(env: &Env) {
-    let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, ClarityError>)> = vec![
+    let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, LegibleError>)> = vec![
         ("print", builtin_print),
         ("read_line", builtin_read_line),
         ("length", builtin_length),
@@ -818,7 +818,7 @@ All errors **must** be emitted as structured JSON to stderr, one object per erro
   "code": "E_TYPE_MISMATCH",
   "severity": "error",
   "location": {
-    "file": "main.clar",
+    "file": "main.lbl",
     "line": 12,
     "column": 5,
     "end_line": 12,
@@ -838,7 +838,7 @@ Every error **must** include a `suggestion` field. This is critical — it enabl
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ClarityError {
+pub struct LegibleError {
     pub code: ErrorCode,
     pub severity: Severity,
     pub location: SourceLocation,
@@ -938,7 +938,7 @@ This is intentionally a soft check. The goal is to catch obviously wrong intents
 
 ## Canonical Formatter
 
-`clarity fmt` rewrites any valid `.clar` file into **the** canonical form. Rules:
+`legible fmt` rewrites any valid `.lbl` file into **the** canonical form. Rules:
 
 1. **Indentation**: 2 spaces per level, no tabs. Ever.
 2. **One blank line** between top-level declarations (functions, records, unions).
@@ -977,7 +977,7 @@ Build the interpreter in this exact order. Each phase should be **fully tested**
 ### Phase 3: Tree-Walking Evaluator
 - Implement `environment.rs` with the `Rc<RefCell<>>` scope chain.
 - Implement `value.rs` with `Display` trait for runtime value printing.
-- Implement `evaluator.rs` — a `fn evaluate(node: NodeId, arena: &Arena, env: &Env) -> Result<Value, ClarityError>` function.
+- Implement `evaluator.rs` — a `fn evaluate(node: NodeId, arena: &Arena, env: &Env) -> Result<Value, LegibleError>` function.
 - Implement `builtins.rs` with all standard library functions.
 - **Test**: evaluate arithmetic, let bindings, function calls, closures, if/else, match, loops, pipelines, records, record update, union construction, pattern matching. Run fixture files and compare stdout to `.expected` files.
 
@@ -1032,19 +1032,19 @@ mod tests {
 
 ### Integration Tests
 
-In `tests/integration.rs`, run `.clar` fixture files through the full pipeline:
+In `tests/integration.rs`, run `.lbl` fixture files through the full pipeline:
 
 ```rust
 use std::fs;
 
 fn run_fixture(name: &str) {
     let source = fs::read_to_string(
-        format!("tests/fixtures/valid/{name}.clar")
+        format!("tests/fixtures/valid/{name}.lbl")
     ).unwrap();
     let expected = fs::read_to_string(
         format!("tests/fixtures/valid/{name}.expected")
     ).unwrap();
-    let output = clarity_lang::run_source(&source).unwrap();
+    let output = legible_lang::run_source(&source).unwrap();
     assert_eq!(output.trim(), expected.trim());
 }
 
@@ -1065,18 +1065,18 @@ For error fixtures, assert that the emitted JSON matches the `.error.json` file.
 
 ## Example Programs
 
-### Hello World — `tests/fixtures/valid/hello.clar`
+### Hello World — `tests/fixtures/valid/hello.lbl`
 
 ```
 function main(): nothing
   intent: print a greeting to the console
-  print("Hello, Clarity!")
+  print("Hello, Legible!")
 end
 ```
 
-Expected output: `Hello, Clarity!`
+Expected output: `Hello, Legible!`
 
-### FizzBuzz — `tests/fixtures/valid/fizzbuzz.clar`
+### FizzBuzz — `tests/fixtures/valid/fizzbuzz.lbl`
 
 ```
 function fizzbuzz(n: integer): text
@@ -1100,7 +1100,7 @@ function main(): nothing
 end
 ```
 
-### Pipelines — `tests/fixtures/valid/pipelines.clar`
+### Pipelines — `tests/fixtures/valid/pipelines.lbl`
 
 ```
 record Person
@@ -1136,7 +1136,7 @@ Alice
 Carol
 ```
 
-### Contracts — `tests/fixtures/valid/contracts.clar`
+### Contracts — `tests/fixtures/valid/contracts.lbl`
 
 ```
 record Account
@@ -1184,7 +1184,7 @@ After withdraw: 120
 - **Derive liberally**: `Debug`, `Clone`, `PartialEq`, `Serialize` on all public types.
 - **Document every public function and type** with `///` doc comments.
 - **No abbreviations** in identifiers. `token_index` not `tok_idx`. `current_character` not `cc`.
-- **Error types**: all fallible operations return `Result<T, ClarityError>`. Do not use `Box<dyn Error>`.
+- **Error types**: all fallible operations return `Result<T, LegibleError>`. Do not use `Box<dyn Error>`.
 - **No `println!` in library code.** All output goes through the evaluator's I/O abstraction (a `Write` trait object) so tests can capture output.
 - **Clippy clean**: run `cargo clippy -- -W clippy::pedantic` and fix all warnings.
 
@@ -1198,7 +1198,7 @@ pub fn evaluate_program(
     root: NodeId,
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> { ... }
+) -> Result<Value, LegibleError> { ... }
 ```
 
 In `main.rs`, pass `&mut std::io::stdout()`. In tests, pass `&mut Vec<u8>`.
@@ -1207,7 +1207,7 @@ In `main.rs`, pass `&mut std::io::stdout()`. In tests, pass `&mut Vec<u8>`.
 
 ## Key Design Decisions
 
-1. **`main()` is the entry point.** When running a `.clar` file, the interpreter looks for `function main(): nothing` and invokes it. If absent, emit `E_UNDEFINED_FUNCTION` with suggestion "Define a main() function as the program entry point."
+1. **`main()` is the entry point.** When running a `.lbl` file, the interpreter looks for `function main(): nothing` and invokes it. If absent, emit `E_UNDEFINED_FUNCTION` with suggestion "Define a main() function as the program entry point."
 2. **Everything is an expression** where possible. `if/else` returns a value. `match` returns a value. Blocks return their last expression.
 3. **No null, only `none`.** The optional type is explicit. Assigning `none` to a non-optional type is `E_TYPE_MISMATCH`.
 4. **All data structures are immutable.** Strings, lists, records — operations return new values.
@@ -1228,9 +1228,9 @@ After Phase 3 is complete, add Criterion benchmarks in `benches/interpreter_benc
 use criterion::{criterion_group, criterion_main, Criterion};
 
 fn bench_fizzbuzz(c: &mut Criterion) {
-    let source = include_str!("../tests/fixtures/valid/fizzbuzz.clar");
+    let source = include_str!("../tests/fixtures/valid/fizzbuzz.lbl");
     c.bench_function("fizzbuzz_1_to_1000", |b| {
-        b.iter(|| clarity_lang::run_source(source))
+        b.iter(|| legible_lang::run_source(source))
     });
 }
 
@@ -1248,7 +1248,7 @@ Track performance across phases to catch regressions.
 - [ ] `cargo clippy -- -W clippy::pedantic` has zero warnings
 - [ ] No uses of `unwrap()` outside of tests
 - [ ] No uses of `unsafe`
-- [ ] All error paths produce a `ClarityError` with a `suggestion` field
+- [ ] All error paths produce a `LegibleError` with a `suggestion` field
 - [ ] All public types and functions have `///` doc comments
 - [ ] Fixture files added for new features
 - [ ] `cargo bench` runs without regression (Phase 3+)

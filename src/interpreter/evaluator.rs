@@ -1,8 +1,8 @@
-/// Tree-walking evaluator for the Clarity language.
+/// Tree-walking evaluator for the Legible language.
 ///
 /// Evaluates an AST by walking it recursively, using the environment
 /// for variable bindings and the output writer for `print` calls.
-use crate::errors::{ClarityError, ErrorCode, Severity, SourceLocation};
+use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
 use crate::interpreter::environment::{Env, Environment};
 use crate::interpreter::value::{Callable, Value};
 use crate::parser::arena::Arena;
@@ -23,7 +23,7 @@ pub fn evaluate_program(
     root: NodeId,
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     // First pass: register all declarations
     if let NodeKind::Program { ref statements } = arena.get(root).kind.clone() {
         for &stmt_id in statements {
@@ -55,7 +55,7 @@ pub fn evaluate_program(
 
 /// Register top-level declarations (functions, records, unions) in the environment
 /// without evaluating their bodies.
-fn register_declaration(arena: &Arena, node_id: NodeId, env: &Env) -> Result<(), ClarityError> {
+fn register_declaration(arena: &Arena, node_id: NodeId, env: &Env) -> Result<(), LegibleError> {
     match &arena.get(node_id).kind.clone() {
         NodeKind::FunctionDecl {
             name,
@@ -93,7 +93,7 @@ fn eval_node(
     node_id: NodeId,
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<EvalSignal, ClarityError> {
+) -> Result<EvalSignal, LegibleError> {
     let node = arena.get(node_id).kind.clone();
     match node {
         NodeKind::Program { statements } => {
@@ -230,7 +230,7 @@ fn eval_expr(
     node_id: NodeId,
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     let node = arena.get(node_id).kind.clone();
     match node {
         NodeKind::IntegerLit(n) => Ok(Value::Integer(n)),
@@ -260,7 +260,7 @@ fn eval_expr(
         NodeKind::Identifier(name) => {
             match env.borrow().get(&name) {
                 Some((val, _)) => Ok(val),
-                None => Err(ClarityError {
+                None => Err(LegibleError {
                     code: ErrorCode::UndefinedVariable,
                     severity: Severity::Error,
                     location: SourceLocation::unknown(),
@@ -600,7 +600,7 @@ fn call_function(
     args: &[Value],
     _caller_env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     match callable {
         Callable::UserDefined {
             params,
@@ -622,7 +622,7 @@ fn call_function(
             for &req_id in requires {
                 let result = eval_expr(arena, req_id, &func_env, output)?;
                 if let Value::Boolean(false) = result {
-                    return Err(ClarityError {
+                    return Err(LegibleError {
                         code: ErrorCode::ContractRequires,
                         severity: Severity::Error,
                         location: SourceLocation::unknown(),
@@ -657,7 +657,7 @@ fn call_function(
                 for &ens_id in ensures {
                     let check = eval_expr(arena, ens_id, &ensures_env, output)?;
                     if let Value::Boolean(false) = check {
-                        return Err(ClarityError {
+                        return Err(LegibleError {
                             code: ErrorCode::ContractEnsures,
                             severity: Severity::Error,
                             location: SourceLocation::unknown(),
@@ -691,7 +691,7 @@ fn call_function(
     }
 }
 
-fn eval_binary_op(lhs: &Value, op: &BinaryOperator, rhs: &Value) -> Result<Value, ClarityError> {
+fn eval_binary_op(lhs: &Value, op: &BinaryOperator, rhs: &Value) -> Result<Value, LegibleError> {
     match op {
         BinaryOperator::Add => match (lhs, rhs) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a + b)),
@@ -721,7 +721,7 @@ fn eval_binary_op(lhs: &Value, op: &BinaryOperator, rhs: &Value) -> Result<Value
             // Check for zero divisor first
             let is_zero = matches!(rhs, Value::Integer(0)) || matches!(rhs, Value::Decimal(n) if *n == 0.0);
             if is_zero {
-                return Err(ClarityError {
+                return Err(LegibleError {
                     code: ErrorCode::DivisionByZero,
                     severity: Severity::Error,
                     location: SourceLocation::unknown(),
@@ -741,7 +741,7 @@ fn eval_binary_op(lhs: &Value, op: &BinaryOperator, rhs: &Value) -> Result<Value
         BinaryOperator::Mod => match (lhs, rhs) {
             (Value::Integer(a), Value::Integer(b)) => {
                 if *b == 0 {
-                    Err(ClarityError {
+                    Err(LegibleError {
                         code: ErrorCode::DivisionByZero,
                         severity: Severity::Error,
                         location: SourceLocation::unknown(),
@@ -781,7 +781,7 @@ fn eval_comparison(
     rhs: &Value,
     int_cmp: fn(i64, i64) -> bool,
     float_cmp: fn(f64, f64) -> bool,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     match (lhs, rhs) {
         (Value::Integer(a), Value::Integer(b)) => Ok(Value::Boolean(int_cmp(*a, *b))),
         (Value::Decimal(a), Value::Decimal(b)) => Ok(Value::Boolean(float_cmp(*a, *b))),
@@ -801,7 +801,7 @@ fn match_pattern(
     value: &Value,
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Option<Vec<(String, Value)>>, ClarityError> {
+) -> Result<Option<Vec<(String, Value)>>, LegibleError> {
     match pattern {
         Pattern::Otherwise => Ok(Some(Vec::new())),
         Pattern::Literal(node_id) => {
@@ -856,7 +856,7 @@ fn eval_filter(
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(runtime_error("filter() expects 2 arguments", "Usage: filter(list, predicate)"));
     }
@@ -880,7 +880,7 @@ fn eval_map(
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(runtime_error("map() expects 2 arguments", "Usage: map(list, transform)"));
     }
@@ -902,7 +902,7 @@ fn eval_reduce(
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     if args.len() != 3 {
         return Err(runtime_error("reduce() expects 3 arguments", "Usage: reduce(list, initial, combine)"));
     }
@@ -923,7 +923,7 @@ fn eval_sort_by(
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(runtime_error("sort_by() expects 2 arguments", "Usage: sort_by(list, key_fn)"));
     }
@@ -950,7 +950,7 @@ fn eval_sort_by(
     }
 }
 
-fn eval_take(args: &[Value]) -> Result<Value, ClarityError> {
+fn eval_take(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(runtime_error("take() expects 2 arguments", "Usage: take(list, count)"));
     }
@@ -963,7 +963,7 @@ fn eval_take(args: &[Value]) -> Result<Value, ClarityError> {
     }
 }
 
-fn eval_drop(args: &[Value]) -> Result<Value, ClarityError> {
+fn eval_drop(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(runtime_error("drop() expects 2 arguments", "Usage: drop(list, count)"));
     }
@@ -981,7 +981,7 @@ fn eval_find(
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
-) -> Result<Value, ClarityError> {
+) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(runtime_error("find() expects 2 arguments", "Usage: find(list, predicate)"));
     }
@@ -999,8 +999,8 @@ fn eval_find(
     }
 }
 
-fn runtime_error(message: &str, suggestion: &str) -> ClarityError {
-    ClarityError {
+fn runtime_error(message: &str, suggestion: &str) -> LegibleError {
+    LegibleError {
         code: ErrorCode::Syntax,
         severity: Severity::Error,
         location: SourceLocation::unknown(),

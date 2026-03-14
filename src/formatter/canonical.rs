@@ -1,11 +1,11 @@
-/// Canonical formatter for Clarity source code.
+/// Canonical formatter for Legible source code.
 ///
-/// Rewrites valid `.clar` files into the one canonical form.
+/// Rewrites valid `.lbl` files into the one canonical form.
 /// The formatter is idempotent: `fmt(fmt(code)) == fmt(code)`.
 use crate::parser::arena::Arena;
 use crate::parser::ast::*;
 
-/// Format a Clarity AST back to source code in canonical form.
+/// Format a Legible AST back to source code in canonical form.
 pub fn format_source(arena: &Arena, root: NodeId) -> String {
     let mut formatter = Formatter::new(arena);
     formatter.format_node(root, 0);
@@ -518,29 +518,29 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn format_type(&mut self, clarity_type: &ClarityType) {
-        match clarity_type {
-            ClarityType::Integer => self.output.push_str("integer"),
-            ClarityType::Decimal => self.output.push_str("decimal"),
-            ClarityType::Text => self.output.push_str("text"),
-            ClarityType::Boolean => self.output.push_str("boolean"),
-            ClarityType::Nothing => self.output.push_str("nothing"),
-            ClarityType::ListOf(inner) => {
+    fn format_type(&mut self, legible_type: &LegibleType) {
+        match legible_type {
+            LegibleType::Integer => self.output.push_str("integer"),
+            LegibleType::Decimal => self.output.push_str("decimal"),
+            LegibleType::Text => self.output.push_str("text"),
+            LegibleType::Boolean => self.output.push_str("boolean"),
+            LegibleType::Nothing => self.output.push_str("nothing"),
+            LegibleType::ListOf(inner) => {
                 self.output.push_str("a list of ");
                 self.format_type(inner);
             }
-            ClarityType::MappingFrom(key, val) => {
+            LegibleType::MappingFrom(key, val) => {
                 self.output.push_str("a mapping from ");
                 self.format_type(key);
                 self.output.push_str(" to ");
                 self.format_type(val);
             }
-            ClarityType::Optional(inner) => {
+            LegibleType::Optional(inner) => {
                 self.output.push_str("an optional ");
                 self.format_type(inner);
             }
-            ClarityType::Named(name) => self.output.push_str(name),
-            ClarityType::Function { params, return_type } => {
+            LegibleType::Named(name) => self.output.push_str(name),
+            LegibleType::Function { params, return_type } => {
                 self.output.push_str("fn(");
                 for (i, p) in params.iter().enumerate() {
                     if i > 0 {
@@ -551,7 +551,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("): ");
                 self.format_type(return_type);
             }
-            ClarityType::Generic(name) => self.output.push_str(name),
+            LegibleType::Generic(name) => self.output.push_str(name),
         }
     }
 

@@ -1,9 +1,9 @@
-/// Clarity language interpreter CLI.
+/// Legible language interpreter CLI.
 use clap::{Parser, Subcommand};
 use std::process;
 
 #[derive(Parser)]
-#[command(name = "clarity", version, about = "The Clarity language interpreter")]
+#[command(name = "legible", version, about = "The Legible language interpreter")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -11,19 +11,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Run a Clarity source file
+    /// Run a Legible source file
     Run {
-        /// Path to the .clar file
+        /// Path to the .lbl file
         file: String,
     },
-    /// Type-check and verify a Clarity source file
+    /// Type-check and verify a Legible source file
     Check {
-        /// Path to the .clar file
+        /// Path to the .lbl file
         file: String,
     },
-    /// Format a Clarity source file
+    /// Format a Legible source file
     Fmt {
-        /// Path to the .clar file
+        /// Path to the .lbl file
         file: String,
         /// Write formatted output back to the file
         #[arg(long)]
@@ -51,7 +51,7 @@ fn cmd_run(file: &str) {
             process::exit(1);
         }
     };
-    match clarity_lang::run_source_with_filename(&source, file) {
+    match legible_lang::run_source_with_filename(&source, file) {
         Ok(output) => print!("{output}"),
         Err(e) => {
             e.emit_json();
@@ -70,7 +70,7 @@ fn cmd_check(file: &str) {
         }
     };
 
-    let tokens = match clarity_lang::lexer::scan(&source) {
+    let tokens = match legible_lang::lexer::scan(&source) {
         Ok(t) => t,
         Err(e) => {
             e.emit_json();
@@ -79,7 +79,7 @@ fn cmd_check(file: &str) {
         }
     };
 
-    let mut parser = clarity_lang::parser::Parser::new(tokens, file, &source);
+    let mut parser = legible_lang::parser::Parser::new(tokens, file, &source);
     let root = match parser.parse_program() {
         Ok(r) => r,
         Err(e) => {
@@ -91,9 +91,9 @@ fn cmd_check(file: &str) {
 
     let arena = &parser.arena;
 
-    let type_errors = clarity_lang::analyzer::typechecker::typecheck(arena, root);
-    let contract_errors = clarity_lang::analyzer::contracts::check_contracts(arena, root);
-    let intent_warnings = clarity_lang::analyzer::intent::verify_intents(arena, root);
+    let type_errors = legible_lang::analyzer::typechecker::typecheck(arena, root);
+    let contract_errors = legible_lang::analyzer::contracts::check_contracts(arena, root);
+    let intent_warnings = legible_lang::analyzer::intent::verify_intents(arena, root);
 
     let mut has_errors = false;
     for err in type_errors.iter().chain(contract_errors.iter()) {
@@ -120,7 +120,7 @@ fn cmd_fmt(file: &str, write_back: bool) {
         }
     };
 
-    let tokens = match clarity_lang::lexer::scan(&source) {
+    let tokens = match legible_lang::lexer::scan(&source) {
         Ok(t) => t,
         Err(e) => {
             e.emit_json();
@@ -129,7 +129,7 @@ fn cmd_fmt(file: &str, write_back: bool) {
         }
     };
 
-    let mut parser = clarity_lang::parser::Parser::new(tokens, file, &source);
+    let mut parser = legible_lang::parser::Parser::new(tokens, file, &source);
     let root = match parser.parse_program() {
         Ok(r) => r,
         Err(e) => {
@@ -139,7 +139,7 @@ fn cmd_fmt(file: &str, write_back: bool) {
         }
     };
 
-    let formatted = clarity_lang::formatter::format_source(&parser.arena, root);
+    let formatted = legible_lang::formatter::format_source(&parser.arena, root);
 
     if write_back {
         if let Err(e) = std::fs::write(file, &formatted) {
@@ -152,11 +152,11 @@ fn cmd_fmt(file: &str, write_back: bool) {
 }
 
 fn cmd_repl() {
-    use clarity_lang::interpreter::builtins::register_builtins;
-    use clarity_lang::interpreter::sdl_builtins::register_sdl_builtins;
-    use clarity_lang::interpreter::environment::Environment;
+    use legible_lang::interpreter::builtins::register_builtins;
+    use legible_lang::interpreter::sdl_builtins::register_sdl_builtins;
+    use legible_lang::interpreter::environment::Environment;
 
-    eprintln!("Clarity REPL v0.1.0 — type expressions to evaluate, Ctrl+D to exit");
+    eprintln!("Legible REPL v0.1.0 — type expressions to evaluate, Ctrl+D to exit");
     let env = Environment::new();
     register_builtins(&env);
     register_sdl_builtins(&env);
@@ -164,7 +164,7 @@ fn cmd_repl() {
     let stdin = std::io::stdin();
     let mut line = String::new();
     loop {
-        eprint!("clarity> ");
+        eprint!("legible> ");
         line.clear();
         match stdin.read_line(&mut line) {
             Ok(0) => {
@@ -176,7 +176,7 @@ fn cmd_repl() {
                 if trimmed.is_empty() {
                     continue;
                 }
-                match clarity_lang::run_source(trimmed) {
+                match legible_lang::run_source(trimmed) {
                     Ok(output) => {
                         if !output.is_empty() {
                             print!("{output}");

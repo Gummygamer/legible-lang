@@ -1,4 +1,4 @@
-/// SDL2 built-in functions for the Clarity language.
+/// SDL2 built-in functions for the Legible language.
 ///
 /// Provides window creation, rendering, input handling, and timing
 /// through thread-local SDL2 state.
@@ -15,7 +15,7 @@ use sdl2::EventPump;
 use sdl2::Sdl;
 use sdl2::TimerSubsystem;
 
-use crate::errors::{ClarityError, ErrorCode, Severity, SourceLocation};
+use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
 use crate::interpreter::environment::Env;
 use crate::interpreter::value::{Callable, Value};
 
@@ -32,8 +32,8 @@ thread_local! {
     static SDL_STATE: RefCell<Option<SdlState>> = const { RefCell::new(None) };
 }
 
-fn sdl_error(message: &str, suggestion: &str) -> ClarityError {
-    ClarityError {
+fn sdl_error(message: &str, suggestion: &str) -> LegibleError {
+    LegibleError {
         code: ErrorCode::Syntax,
         severity: Severity::Error,
         location: SourceLocation::unknown(),
@@ -45,7 +45,7 @@ fn sdl_error(message: &str, suggestion: &str) -> ClarityError {
 
 /// Register all SDL2 built-in functions in the given environment.
 pub fn register_sdl_builtins(env: &Env) {
-    let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, ClarityError>)> = vec![
+    let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, LegibleError>)> = vec![
         ("sdl_init", builtin_sdl_init),
         ("sdl_poll_events", builtin_sdl_poll_events),
         ("sdl_is_key_pressed", builtin_sdl_is_key_pressed),
@@ -69,7 +69,7 @@ pub fn register_sdl_builtins(env: &Env) {
     }
 }
 
-fn require_integer(val: &Value, name: &str) -> Result<i64, ClarityError> {
+fn require_integer(val: &Value, name: &str) -> Result<i64, LegibleError> {
     match val {
         Value::Integer(n) => Ok(*n),
         _ => Err(sdl_error(
@@ -79,7 +79,7 @@ fn require_integer(val: &Value, name: &str) -> Result<i64, ClarityError> {
     }
 }
 
-fn require_text(val: &Value, name: &str) -> Result<String, ClarityError> {
+fn require_text(val: &Value, name: &str) -> Result<String, LegibleError> {
     match val {
         Value::Text(s) => Ok(s.clone()),
         _ => Err(sdl_error(
@@ -94,9 +94,9 @@ fn scancode_name(scancode: Scancode) -> String {
     format!("{scancode:?}")
 }
 
-fn with_sdl<F, R>(f: F) -> Result<R, ClarityError>
+fn with_sdl<F, R>(f: F) -> Result<R, LegibleError>
 where
-    F: FnOnce(&mut SdlState) -> Result<R, ClarityError>,
+    F: FnOnce(&mut SdlState) -> Result<R, LegibleError>,
 {
     SDL_STATE.with(|state| {
         let mut borrow = state.borrow_mut();
@@ -111,7 +111,7 @@ where
 }
 
 /// `sdl_init(title: text, width: integer, height: integer): nothing`
-fn builtin_sdl_init(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_init(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 3 {
         return Err(sdl_error(
             "sdl_init() expects 3 arguments",
@@ -158,7 +158,7 @@ fn builtin_sdl_init(args: &[Value]) -> Result<Value, ClarityError> {
 }
 
 /// `sdl_poll_events(): a list of text`
-fn builtin_sdl_poll_events(_args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_poll_events(_args: &[Value]) -> Result<Value, LegibleError> {
     with_sdl(|sdl| {
         let mut events = Vec::new();
         let collected: Vec<Event> = sdl.event_pump.poll_iter().collect();
@@ -191,7 +191,7 @@ fn builtin_sdl_poll_events(_args: &[Value]) -> Result<Value, ClarityError> {
 }
 
 /// `sdl_is_key_pressed(key: text): boolean`
-fn builtin_sdl_is_key_pressed(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_is_key_pressed(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 1 {
         return Err(sdl_error(
             "sdl_is_key_pressed() expects 1 argument",
@@ -203,7 +203,7 @@ fn builtin_sdl_is_key_pressed(args: &[Value]) -> Result<Value, ClarityError> {
 }
 
 /// `sdl_clear(r: integer, g: integer, b: integer): nothing`
-fn builtin_sdl_clear(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_clear(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 3 {
         return Err(sdl_error(
             "sdl_clear() expects 3 arguments",
@@ -222,7 +222,7 @@ fn builtin_sdl_clear(args: &[Value]) -> Result<Value, ClarityError> {
 }
 
 /// `sdl_fill_rect(x: integer, y: integer, w: integer, h: integer, r: integer, g: integer, b: integer): nothing`
-fn builtin_sdl_fill_rect(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_fill_rect(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 7 {
         return Err(sdl_error(
             "sdl_fill_rect() expects 7 arguments",
@@ -247,7 +247,7 @@ fn builtin_sdl_fill_rect(args: &[Value]) -> Result<Value, ClarityError> {
 }
 
 /// `sdl_present(): nothing`
-fn builtin_sdl_present(_args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_present(_args: &[Value]) -> Result<Value, LegibleError> {
     with_sdl(|sdl| {
         sdl.canvas.present();
         Ok(Value::None)
@@ -255,7 +255,7 @@ fn builtin_sdl_present(_args: &[Value]) -> Result<Value, ClarityError> {
 }
 
 /// `sdl_delay(ms: integer): nothing`
-fn builtin_sdl_delay(args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_delay(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 1 {
         return Err(sdl_error(
             "sdl_delay() expects 1 argument",
@@ -268,12 +268,12 @@ fn builtin_sdl_delay(args: &[Value]) -> Result<Value, ClarityError> {
 }
 
 /// `sdl_get_ticks(): integer`
-fn builtin_sdl_get_ticks(_args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_get_ticks(_args: &[Value]) -> Result<Value, LegibleError> {
     with_sdl(|sdl| Ok(Value::Integer(i64::from(sdl.timer.ticks()))))
 }
 
 /// `sdl_quit(): nothing`
-fn builtin_sdl_quit(_args: &[Value]) -> Result<Value, ClarityError> {
+fn builtin_sdl_quit(_args: &[Value]) -> Result<Value, LegibleError> {
     SDL_STATE.with(|state| {
         *state.borrow_mut() = None;
     });

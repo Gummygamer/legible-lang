@@ -1,10 +1,10 @@
-/// Character-by-character scanner for the Clarity language.
+/// Character-by-character scanner for the Legible language.
 ///
 /// Produces a flat sequence of `SpannedToken` values from source text.
 /// Handles multi-word type keywords (`a list of`, `a mapping from`,
 /// `an optional`) via lookahead, and string interpolation via structured
 /// token sequences.
-use crate::errors::{ClarityError, ErrorCode, Severity, SourceLocation};
+use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
 use crate::lexer::token::{Span, SpannedToken, Token};
 
 /// Tokenize a source string into a list of spanned tokens.
@@ -12,7 +12,7 @@ use crate::lexer::token::{Span, SpannedToken, Token};
 /// Comments are included in the output so the formatter can preserve them.
 /// Newlines are emitted as `Token::Newline` for statement termination.
 #[must_use]
-pub fn scan(source: &str) -> Result<Vec<SpannedToken>, ClarityError> {
+pub fn scan(source: &str) -> Result<Vec<SpannedToken>, LegibleError> {
     let mut scanner = Scanner::new(source);
     scanner.scan_all()?;
     Ok(scanner.tokens)
@@ -44,7 +44,7 @@ impl Scanner {
         }
     }
 
-    fn scan_all(&mut self) -> Result<(), ClarityError> {
+    fn scan_all(&mut self) -> Result<(), LegibleError> {
         while !self.is_at_end() {
             self.start = self.current;
             self.start_byte = self.current_byte;
@@ -60,7 +60,7 @@ impl Scanner {
         Ok(())
     }
 
-    fn scan_token(&mut self) -> Result<(), ClarityError> {
+    fn scan_token(&mut self) -> Result<(), LegibleError> {
         let ch = self.advance();
         match ch {
             ' ' | '\t' | '\r' => {} // skip whitespace (not newlines)
@@ -155,7 +155,7 @@ impl Scanner {
         self.add_token(Token::Comment(text.trim().to_string()));
     }
 
-    fn scan_string(&mut self) -> Result<(), ClarityError> {
+    fn scan_string(&mut self) -> Result<(), LegibleError> {
         // Check for triple-quoted string
         if self.peek() == '"' && self.peek_next() == '"' {
             self.advance(); // second "
@@ -165,7 +165,7 @@ impl Scanner {
         self.scan_regular_string()
     }
 
-    fn scan_regular_string(&mut self) -> Result<(), ClarityError> {
+    fn scan_regular_string(&mut self) -> Result<(), LegibleError> {
         let mut has_interpolation = false;
         let mut parts: Vec<(Token, Span)> = Vec::new();
         let mut literal_buf = String::new();
@@ -303,7 +303,7 @@ impl Scanner {
         Ok(())
     }
 
-    fn scan_triple_string(&mut self) -> Result<(), ClarityError> {
+    fn scan_triple_string(&mut self) -> Result<(), LegibleError> {
         let mut content = String::new();
         while !self.is_at_end() {
             if self.peek() == '"' && self.peek_next() == '"' && self.peek_at(2) == '"' {
@@ -329,7 +329,7 @@ impl Scanner {
         ))
     }
 
-    fn scan_number(&mut self) -> Result<(), ClarityError> {
+    fn scan_number(&mut self) -> Result<(), LegibleError> {
         while !self.is_at_end() && self.peek().is_ascii_digit() {
             self.advance();
         }
@@ -359,7 +359,7 @@ impl Scanner {
         Ok(())
     }
 
-    fn scan_identifier(&mut self) -> Result<(), ClarityError> {
+    fn scan_identifier(&mut self) -> Result<(), LegibleError> {
         while !self.is_at_end() && (self.peek().is_alphanumeric() || self.peek() == '_') {
             self.advance();
         }
@@ -518,10 +518,10 @@ impl Scanner {
         });
     }
 
-    fn error(&self, message: &str, suggestion: &str) -> ClarityError {
+    fn error(&self, message: &str, suggestion: &str) -> LegibleError {
         let (line, column) =
             crate::errors::reporter::offset_to_line_col(&self.source_str, self.start_byte);
-        ClarityError {
+        LegibleError {
             code: ErrorCode::Syntax,
             severity: Severity::Error,
             location: SourceLocation {

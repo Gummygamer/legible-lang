@@ -2,10 +2,10 @@ use std::fs;
 
 fn run_fixture(name: &str) {
     let source =
-        fs::read_to_string(format!("tests/fixtures/valid/{name}.clar")).unwrap();
+        fs::read_to_string(format!("tests/fixtures/valid/{name}.lbl")).unwrap();
     let expected =
         fs::read_to_string(format!("tests/fixtures/valid/{name}.expected")).unwrap();
-    let output = clarity_lang::run_source(&source).unwrap();
+    let output = legible_lang::run_source(&source).unwrap();
     assert_eq!(output.trim(), expected.trim(), "Fixture {name} mismatch");
 }
 

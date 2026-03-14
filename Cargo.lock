@@ -210,19 +210,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
-name = "clarity-lang"
-version = "0.1.0"
-dependencies = [
- "clap",
- "criterion",
- "miette",
- "pretty_assertions",
- "sdl2",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -399,6 +386,19 @@ name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+
+[[package]]
+name = "legible-lang"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "criterion",
+ "miette",
+ "pretty_assertions",
+ "sdl2",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "libc"

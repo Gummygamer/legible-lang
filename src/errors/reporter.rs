@@ -1,12 +1,12 @@
-/// Structured error reporting for Clarity.
+/// Structured error reporting for Legible.
 ///
 /// All errors are emitted as JSON to stderr. When `--human` is passed,
 /// a human-readable rendering is also shown.
 use serde::Serialize;
 
-/// A structured error produced by any phase of the Clarity pipeline.
+/// A structured error produced by any phase of the Legible pipeline.
 #[derive(Debug, Clone, Serialize)]
-pub struct ClarityError {
+pub struct LegibleError {
     pub code: ErrorCode,
     pub severity: Severity,
     pub location: SourceLocation,
@@ -15,7 +15,7 @@ pub struct ClarityError {
     pub suggestion: String,
 }
 
-impl std::fmt::Display for ClarityError {
+impl std::fmt::Display for LegibleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -25,7 +25,7 @@ impl std::fmt::Display for ClarityError {
     }
 }
 
-impl std::error::Error for ClarityError {}
+impl std::error::Error for LegibleError {}
 
 /// Source location for error reporting.
 #[derive(Debug, Clone, Serialize)]
@@ -118,7 +118,7 @@ impl std::fmt::Display for ErrorCode {
     }
 }
 
-impl ClarityError {
+impl LegibleError {
     /// Emit this error as JSON to stderr.
     pub fn emit_json(&self) {
         if let Ok(json) = serde_json::to_string(self) {

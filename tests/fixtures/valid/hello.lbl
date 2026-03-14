@@ -1,4 +1,4 @@
 function main(): nothing
   intent: print a greeting to the console
-  print("Hello, Clarity!")
+  print("Hello, Legible!")
 end

@@ -1,4 +1,4 @@
-/// Token types and span information for the Clarity lexer.
+/// Token types and span information for the Legible lexer.
 
 /// Byte offset range into the source string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,7 +14,7 @@ pub struct SpannedToken {
     pub span: Span,
 }
 
-/// All token types in the Clarity language.
+/// All token types in the Legible language.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Literals
