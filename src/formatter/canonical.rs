@@ -1,6 +1,6 @@
 /// Canonical formatter for Clarity source code.
 ///
-/// Rewrites valid `.cl` files into the one canonical form.
+/// Rewrites valid `.clar` files into the one canonical form.
 /// The formatter is idempotent: `fmt(fmt(code)) == fmt(code)`.
 use crate::parser::arena::Arena;
 use crate::parser::ast::*;

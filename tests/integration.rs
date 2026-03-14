@@ -2,7 +2,7 @@ use std::fs;
 
 fn run_fixture(name: &str) {
     let source =
-        fs::read_to_string(format!("tests/fixtures/valid/{name}.cl")).unwrap();
+        fs::read_to_string(format!("tests/fixtures/valid/{name}.clar")).unwrap();
     let expected =
         fs::read_to_string(format!("tests/fixtures/valid/{name}.expected")).unwrap();
     let output = clarity_lang::run_source(&source).unwrap();

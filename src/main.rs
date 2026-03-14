@@ -13,17 +13,17 @@ struct Cli {
 enum Commands {
     /// Run a Clarity source file
     Run {
-        /// Path to the .cl file
+        /// Path to the .clar file
         file: String,
     },
     /// Type-check and verify a Clarity source file
     Check {
-        /// Path to the .cl file
+        /// Path to the .clar file
         file: String,
     },
     /// Format a Clarity source file
     Fmt {
-        /// Path to the .cl file
+        /// Path to the .clar file
         file: String,
         /// Write formatted output back to the file
         #[arg(long)]

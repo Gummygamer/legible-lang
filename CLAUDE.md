@@ -7,9 +7,9 @@ You are building an **interpreter** for **Clarity**, a programming language desi
 The project name is `clarity-lang`. It is a single Cargo binary crate invoked as:
 
 ```bash
-clarity run <file.cl>
-clarity check <file.cl>     # typecheck + intent verification only
-clarity fmt <file.cl>        # canonical formatter (stdout or --write)
+clarity run <file.clar>
+clarity check <file.clar>     # typecheck + intent verification only
+clarity fmt <file.clar>        # canonical formatter (stdout or --write)
 clarity repl                 # interactive REPL
 ```
 
@@ -50,20 +50,20 @@ clarity-lang/
 │       ├── mod.rs
 │       └── reporter.rs         # Structured JSON error output
 ├── tests/
-│   ├── integration.rs          # End-to-end .cl file tests
+│   ├── integration.rs          # End-to-end .clar file tests
 │   └── fixtures/
 │       ├── valid/
-│       │   ├── hello.cl
+│       │   ├── hello.clar
 │       │   ├── hello.expected
-│       │   ├── fizzbuzz.cl
+│       │   ├── fizzbuzz.clar
 │       │   ├── fizzbuzz.expected
-│       │   ├── pipelines.cl
+│       │   ├── pipelines.clar
 │       │   ├── pipelines.expected
-│       │   ├── contracts.cl
+│       │   ├── contracts.clar
 │       │   ├── contracts.expected
 │       │   └── ...
 │       └── errors/
-│           ├── type_mismatch.cl
+│           ├── type_mismatch.clar
 │           ├── type_mismatch.error.json
 │           └── ...
 └── benches/
@@ -501,7 +501,7 @@ impl Environment {
 
 ### File Extension
 
-`.cl`
+`.clar`
 
 ### Comments
 
@@ -701,10 +701,10 @@ No bitwise operators. No ternary operator (use `if/then/else`).
 
 ### Modules
 
-Each `.cl` file is a module. The filename is the module name.
+Each `.clar` file is a module. The filename is the module name.
 
 ```
--- in math_utils.cl
+-- in math_utils.clar
 public function add(a: integer, b: integer): integer
   intent: return the sum of two integers
   return a + b
@@ -712,7 +712,7 @@ end
 ```
 
 ```
--- in main.cl
+-- in main.clar
 use math_utils
 
 let result: integer = math_utils.add(1, 2)
@@ -818,7 +818,7 @@ All errors **must** be emitted as structured JSON to stderr, one object per erro
   "code": "E_TYPE_MISMATCH",
   "severity": "error",
   "location": {
-    "file": "main.cl",
+    "file": "main.clar",
     "line": 12,
     "column": 5,
     "end_line": 12,
@@ -938,7 +938,7 @@ This is intentionally a soft check. The goal is to catch obviously wrong intents
 
 ## Canonical Formatter
 
-`clarity fmt` rewrites any valid `.cl` file into **the** canonical form. Rules:
+`clarity fmt` rewrites any valid `.clar` file into **the** canonical form. Rules:
 
 1. **Indentation**: 2 spaces per level, no tabs. Ever.
 2. **One blank line** between top-level declarations (functions, records, unions).
@@ -1032,14 +1032,14 @@ mod tests {
 
 ### Integration Tests
 
-In `tests/integration.rs`, run `.cl` fixture files through the full pipeline:
+In `tests/integration.rs`, run `.clar` fixture files through the full pipeline:
 
 ```rust
 use std::fs;
 
 fn run_fixture(name: &str) {
     let source = fs::read_to_string(
-        format!("tests/fixtures/valid/{name}.cl")
+        format!("tests/fixtures/valid/{name}.clar")
     ).unwrap();
     let expected = fs::read_to_string(
         format!("tests/fixtures/valid/{name}.expected")
@@ -1065,7 +1065,7 @@ For error fixtures, assert that the emitted JSON matches the `.error.json` file.
 
 ## Example Programs
 
-### Hello World — `tests/fixtures/valid/hello.cl`
+### Hello World — `tests/fixtures/valid/hello.clar`
 
 ```
 function main(): nothing
@@ -1076,7 +1076,7 @@ end
 
 Expected output: `Hello, Clarity!`
 
-### FizzBuzz — `tests/fixtures/valid/fizzbuzz.cl`
+### FizzBuzz — `tests/fixtures/valid/fizzbuzz.clar`
 
 ```
 function fizzbuzz(n: integer): text
@@ -1100,7 +1100,7 @@ function main(): nothing
 end
 ```
 
-### Pipelines — `tests/fixtures/valid/pipelines.cl`
+### Pipelines — `tests/fixtures/valid/pipelines.clar`
 
 ```
 record Person
@@ -1136,7 +1136,7 @@ Alice
 Carol
 ```
 
-### Contracts — `tests/fixtures/valid/contracts.cl`
+### Contracts — `tests/fixtures/valid/contracts.clar`
 
 ```
 record Account
@@ -1207,7 +1207,7 @@ In `main.rs`, pass `&mut std::io::stdout()`. In tests, pass `&mut Vec<u8>`.
 
 ## Key Design Decisions
 
-1. **`main()` is the entry point.** When running a `.cl` file, the interpreter looks for `function main(): nothing` and invokes it. If absent, emit `E_UNDEFINED_FUNCTION` with suggestion "Define a main() function as the program entry point."
+1. **`main()` is the entry point.** When running a `.clar` file, the interpreter looks for `function main(): nothing` and invokes it. If absent, emit `E_UNDEFINED_FUNCTION` with suggestion "Define a main() function as the program entry point."
 2. **Everything is an expression** where possible. `if/else` returns a value. `match` returns a value. Blocks return their last expression.
 3. **No null, only `none`.** The optional type is explicit. Assigning `none` to a non-optional type is `E_TYPE_MISMATCH`.
 4. **All data structures are immutable.** Strings, lists, records — operations return new values.
@@ -1228,7 +1228,7 @@ After Phase 3 is complete, add Criterion benchmarks in `benches/interpreter_benc
 use criterion::{criterion_group, criterion_main, Criterion};
 
 fn bench_fizzbuzz(c: &mut Criterion) {
-    let source = include_str!("../tests/fixtures/valid/fizzbuzz.cl");
+    let source = include_str!("../tests/fixtures/valid/fizzbuzz.clar");
     c.bench_function("fizzbuzz_1_to_1000", |b| {
         b.iter(|| clarity_lang::run_source(source))
     });
