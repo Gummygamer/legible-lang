@@ -2,7 +2,9 @@
 ///
 /// Evaluates an AST by walking it recursively, using the environment
 /// for variable bindings and the output writer for `print` calls.
-use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
+use std::rc::Rc;
+
+use crate::errors::{ErrorCode, LegibleError, Severity, SourceLocation};
 use crate::interpreter::environment::{Env, Environment};
 use crate::interpreter::value::{Callable, Value};
 use crate::parser::arena::Arena;
@@ -24,10 +26,24 @@ pub fn evaluate_program(
     env: &Env,
     output: &mut dyn std::io::Write,
 ) -> Result<Value, LegibleError> {
+    let arena_rc = Rc::new(arena.clone());
+    evaluate_program_rc(&arena_rc, root, env, output)
+}
+
+/// Evaluate a parsed program using a reference-counted arena.
+///
+/// This is the internal implementation that threads `Rc<Arena>` through
+/// so that Callables can hold arena references for cross-module calls.
+pub fn evaluate_program_rc(
+    arena_rc: &Rc<Arena>,
+    root: NodeId,
+    env: &Env,
+    output: &mut dyn std::io::Write,
+) -> Result<Value, LegibleError> {
     // First pass: register all declarations
-    if let NodeKind::Program { ref statements } = arena.get(root).kind.clone() {
+    if let NodeKind::Program { ref statements } = arena_rc.get(root).kind.clone() {
         for &stmt_id in statements {
-            register_declaration(arena, stmt_id, env)?;
+            register_declaration(arena_rc, stmt_id, env)?;
         }
 
         // Look for main()
@@ -35,14 +51,14 @@ pub fn evaluate_program(
         if has_main {
             let main_val = env.borrow().get("main").unwrap().0;
             if let Value::Function(callable) = main_val {
-                return call_function(arena, &callable, &[], env, output);
+                return call_function(&callable, &[], env, output);
             }
         }
 
         // No main — evaluate top-level statements
         let mut last = Value::None;
         for &stmt_id in statements {
-            match eval_node(arena, stmt_id, env, output)? {
+            match eval_node(arena_rc, stmt_id, env, output)? {
                 EvalSignal::Value(v) => last = v,
                 EvalSignal::Return(v) => return Ok(v),
             }
@@ -55,8 +71,12 @@ pub fn evaluate_program(
 
 /// Register top-level declarations (functions, records, unions) in the environment
 /// without evaluating their bodies.
-fn register_declaration(arena: &Arena, node_id: NodeId, env: &Env) -> Result<(), LegibleError> {
-    match &arena.get(node_id).kind.clone() {
+fn register_declaration(
+    arena_rc: &Rc<Arena>,
+    node_id: NodeId,
+    env: &Env,
+) -> Result<(), LegibleError> {
+    match &arena_rc.get(node_id).kind.clone() {
         NodeKind::FunctionDecl {
             name,
             params,
@@ -75,13 +95,13 @@ fn register_declaration(arena: &Arena, node_id: NodeId, env: &Env) -> Result<(),
                 ensures: ensures.clone(),
                 body: body.clone(),
                 closure_env: Env::clone(env),
+                source_arena: Rc::clone(arena_rc),
             };
             env.borrow_mut()
                 .define(name.clone(), Value::Function(callable), false);
             Ok(())
         }
         NodeKind::RecordDecl { .. } | NodeKind::UnionDecl { .. } | NodeKind::UseDecl { .. } => {
-            // Records and unions are type-level; handled during construction
             Ok(())
         }
         _ => Ok(()),
@@ -89,7 +109,7 @@ fn register_declaration(arena: &Arena, node_id: NodeId, env: &Env) -> Result<(),
 }
 
 fn eval_node(
-    arena: &Arena,
+    arena: &Rc<Arena>,
     node_id: NodeId,
     env: &Env,
     output: &mut dyn std::io::Write,
@@ -142,7 +162,10 @@ fn eval_node(
                     }
                 }
             } else {
-                return Err(runtime_error("For loop requires a list as iterable", "Ensure the iterable expression evaluates to a list"));
+                return Err(runtime_error(
+                    "For loop requires a list as iterable",
+                    "Ensure the iterable expression evaluates to a list",
+                ));
             }
             Ok(EvalSignal::Value(Value::None))
         }
@@ -174,10 +197,7 @@ fn eval_node(
             Ok(EvalSignal::Return(val))
         }
 
-        NodeKind::ExprStatement { expr } => {
-            // Delegate to eval_node so IfExpr/MatchExpr can propagate Return signals.
-            eval_node(arena, expr, env, output)
-        }
+        NodeKind::ExprStatement { expr } => eval_node(arena, expr, env, output),
 
         NodeKind::IfExpr {
             condition,
@@ -206,8 +226,6 @@ fn eval_node(
         }
 
         NodeKind::FunctionDecl { name, .. } => {
-            // Already registered in first pass; skip
-            // But re-register in case this is inside a block
             register_declaration(arena, node_id, env)?;
             let _ = name;
             Ok(EvalSignal::Value(Value::None))
@@ -218,7 +236,6 @@ fn eval_node(
         }
 
         _ => {
-            // Treat as expression
             let val = eval_expr(arena, node_id, env, output)?;
             Ok(EvalSignal::Value(val))
         }
@@ -226,7 +243,7 @@ fn eval_node(
 }
 
 fn eval_expr(
-    arena: &Arena,
+    arena: &Rc<Arena>,
     node_id: NodeId,
     env: &Env,
     output: &mut dyn std::io::Write,
@@ -257,19 +274,17 @@ fn eval_expr(
             Ok(Value::Mapping(mapping))
         }
 
-        NodeKind::Identifier(name) => {
-            match env.borrow().get(&name) {
-                Some((val, _)) => Ok(val),
-                None => Err(LegibleError {
-                    code: ErrorCode::UndefinedVariable,
-                    severity: Severity::Error,
-                    location: SourceLocation::unknown(),
-                    message: format!("Undefined variable '{name}'"),
-                    context: String::new(),
-                    suggestion: format!("Define '{name}' with 'let' before using it"),
-                }),
-            }
-        }
+        NodeKind::Identifier(name) => match env.borrow().get(&name) {
+            Some((val, _)) => Ok(val),
+            None => Err(LegibleError {
+                code: ErrorCode::UndefinedVariable,
+                severity: Severity::Error,
+                location: SourceLocation::unknown(),
+                message: format!("Undefined variable '{name}'"),
+                context: String::new(),
+                suggestion: format!("Define '{name}' with 'let' before using it"),
+            }),
+        },
 
         NodeKind::FieldAccess { object, field } => {
             let obj = eval_expr(arena, object, env, output)?;
@@ -304,7 +319,6 @@ fn eval_expr(
         }
 
         NodeKind::FunctionCall { callee, arguments } => {
-            // Evaluate arguments
             let mut args = Vec::new();
             for arg_id in &arguments {
                 args.push(eval_expr(arena, *arg_id, env, output)?);
@@ -320,8 +334,6 @@ fn eval_expr(
                     }
                     return Ok(Value::None);
                 }
-                // Handle filter, map, reduce, sort_by, take, drop, find as builtins
-                // that take lambdas (need arena access)
                 match name.as_str() {
                     "filter" => return eval_filter(arena, &args, env, output),
                     "map" => return eval_map(arena, &args, env, output),
@@ -336,7 +348,7 @@ fn eval_expr(
 
             let callee_val = eval_expr(arena, callee, env, output)?;
             match callee_val {
-                Value::Function(callable) => call_function(arena, &callable, &args, env, output),
+                Value::Function(callable) => call_function(&callable, &args, env, output),
                 _ => Err(runtime_error(
                     "Attempted to call a non-function value",
                     "Ensure the callee is a function",
@@ -346,16 +358,15 @@ fn eval_expr(
 
         NodeKind::Pipeline { left, right } => {
             let left_val = eval_expr(arena, left, env, output)?;
-            // right should be a function call; inject left_val as first arg
             match &arena.get(right).kind.clone() {
                 NodeKind::FunctionCall { callee, arguments } => {
                     let callee_clone = *callee;
                     let arguments_clone = arguments.clone();
 
-                    // Check for special builtins that need arena access
                     if let NodeKind::Identifier(ref name) = arena.get(callee_clone).kind {
                         match name.as_str() {
-                            "filter" | "map" | "reduce" | "sort_by" | "take" | "drop" | "find" => {
+                            "filter" | "map" | "reduce" | "sort_by" | "take" | "drop"
+                            | "find" => {
                                 let mut args = vec![left_val];
                                 for arg_id in &arguments_clone {
                                     args.push(eval_expr(arena, *arg_id, env, output)?);
@@ -373,7 +384,10 @@ fn eval_expr(
                             }
                             "print" => {
                                 writeln!(output, "{left_val}").map_err(|e| {
-                                    runtime_error(&format!("Write error: {e}"), "Check output stream")
+                                    runtime_error(
+                                        &format!("Write error: {e}"),
+                                        "Check output stream",
+                                    )
                                 })?;
                                 return Ok(Value::None);
                             }
@@ -387,9 +401,7 @@ fn eval_expr(
                         args.push(eval_expr(arena, *arg_id, env, output)?);
                     }
                     match callee_val {
-                        Value::Function(callable) => {
-                            call_function(arena, &callable, &args, env, output)
-                        }
+                        Value::Function(callable) => call_function(&callable, &args, env, output),
                         _ => Err(runtime_error(
                             "Pipeline target is not a function",
                             "Ensure the right side of |> is a function call",
@@ -397,22 +409,17 @@ fn eval_expr(
                     }
                 }
                 NodeKind::Identifier(name) => {
-                    // Simple identifier on the right side: call it with left as arg
                     let name = name.clone();
-                    // Check special builtins
-                    match name.as_str() {
-                        "print" => {
-                            writeln!(output, "{left_val}").map_err(|e| {
-                                runtime_error(&format!("Write error: {e}"), "Check output stream")
-                            })?;
-                            return Ok(Value::None);
-                        }
-                        _ => {}
+                    if name == "print" {
+                        writeln!(output, "{left_val}").map_err(|e| {
+                            runtime_error(&format!("Write error: {e}"), "Check output stream")
+                        })?;
+                        return Ok(Value::None);
                     }
                     let callee_val = eval_expr(arena, right, env, output)?;
                     match callee_val {
                         Value::Function(callable) => {
-                            call_function(arena, &callable, &[left_val], env, output)
+                            call_function(&callable, &[left_val], env, output)
                         }
                         _ => Err(runtime_error(
                             "Pipeline target is not a function",
@@ -439,11 +446,17 @@ fn eval_expr(
                 UnaryOperator::Negate => match val {
                     Value::Integer(n) => Ok(Value::Integer(-n)),
                     Value::Decimal(n) => Ok(Value::Decimal(-n)),
-                    _ => Err(runtime_error("Cannot negate non-numeric value", "Use negation on numbers only")),
+                    _ => Err(runtime_error(
+                        "Cannot negate non-numeric value",
+                        "Use negation on numbers only",
+                    )),
                 },
                 UnaryOperator::Not => match val {
                     Value::Boolean(b) => Ok(Value::Boolean(!b)),
-                    _ => Err(runtime_error("Cannot apply 'not' to non-boolean", "Use 'not' on boolean values only")),
+                    _ => Err(runtime_error(
+                        "Cannot apply 'not' to non-boolean",
+                        "Use 'not' on boolean values only",
+                    )),
                 },
             }
         }
@@ -475,7 +488,9 @@ fn eval_expr(
         NodeKind::MatchExpr { subject, arms } => {
             let subject_val = eval_expr(arena, subject, env, output)?;
             for arm in &arms {
-                if let Some(bindings) = match_pattern(arena, &arm.pattern, &subject_val, env, output)? {
+                if let Some(bindings) =
+                    match_pattern(arena, &arm.pattern, &subject_val, env, output)?
+                {
                     let arm_env = Environment::with_parent(env);
                     for (name, val) in bindings {
                         arm_env.borrow_mut().define(name, val, false);
@@ -556,14 +571,11 @@ fn eval_expr(
             })
         }
 
-        NodeKind::Lambda {
-            params,
-            body,
-            ..
-        } => Ok(Value::Function(Callable::Lambda {
+        NodeKind::Lambda { params, body, .. } => Ok(Value::Function(Callable::Lambda {
             params,
             body,
             closure_env: Env::clone(env),
+            source_arena: Rc::clone(arena),
         })),
 
         NodeKind::InterpolatedText { parts } => {
@@ -580,12 +592,7 @@ fn eval_expr(
             Ok(Value::Text(result))
         }
 
-        NodeKind::OldExpr { inner } => {
-            // `old(expr)` is evaluated at function entry time.
-            // In the evaluator, we evaluate it normally — the contracts
-            // system captures old values before the body runs.
-            eval_expr(arena, inner, env, output)
-        }
+        NodeKind::OldExpr { inner } => eval_expr(arena, inner, env, output),
 
         _ => Err(runtime_error(
             &format!("Cannot evaluate node: {:?}", arena.get(node_id).kind),
@@ -594,8 +601,9 @@ fn eval_expr(
     }
 }
 
+/// Call a function value. Uses the callable's own arena for evaluating its body,
+/// enabling cross-module function calls.
 fn call_function(
-    arena: &Arena,
     callable: &Callable,
     args: &[Value],
     _caller_env: &Env,
@@ -608,19 +616,19 @@ fn call_function(
             ensures,
             body,
             closure_env,
+            source_arena,
             ..
         } => {
             let func_env = Environment::with_parent(closure_env);
 
-            // Bind parameters
             for (i, param) in params.iter().enumerate() {
                 let val = args.get(i).cloned().unwrap_or(Value::None);
                 func_env.borrow_mut().define(param.name.clone(), val, false);
             }
 
-            // Evaluate requires contracts
+            // Evaluate requires contracts using the function's own arena
             for &req_id in requires {
-                let result = eval_expr(arena, req_id, &func_env, output)?;
+                let result = eval_expr(source_arena, req_id, &func_env, output)?;
                 if let Value::Boolean(false) = result {
                     return Err(LegibleError {
                         code: ErrorCode::ContractRequires,
@@ -633,13 +641,12 @@ fn call_function(
                 }
             }
 
-            // Capture old values for ensures (clone env state at entry)
             let old_env = func_env.clone();
 
-            // Evaluate body
+            // Evaluate body using the function's own arena
             let mut result = Value::None;
             for &stmt_id in body {
-                match eval_node(arena, stmt_id, &func_env, output)? {
+                match eval_node(source_arena, stmt_id, &func_env, output)? {
                     EvalSignal::Return(v) => {
                         result = v;
                         break;
@@ -655,7 +662,7 @@ fn call_function(
                     .borrow_mut()
                     .define("result".to_string(), result.clone(), false);
                 for &ens_id in ensures {
-                    let check = eval_expr(arena, ens_id, &ensures_env, output)?;
+                    let check = eval_expr(source_arena, ens_id, &ensures_env, output)?;
                     if let Value::Boolean(false) = check {
                         return Err(LegibleError {
                             code: ErrorCode::ContractEnsures,
@@ -676,6 +683,7 @@ fn call_function(
             params,
             body,
             closure_env,
+            source_arena,
         } => {
             let lambda_env = Environment::with_parent(closure_env);
             for (i, param) in params.iter().enumerate() {
@@ -684,7 +692,7 @@ fn call_function(
                     .borrow_mut()
                     .define(param.name.clone(), val, false);
             }
-            eval_expr(arena, *body, &lambda_env, output)
+            eval_expr(source_arena, *body, &lambda_env, output)
         }
 
         Callable::Builtin { func, .. } => func(args),
@@ -708,18 +716,24 @@ fn eval_binary_op(lhs: &Value, op: &BinaryOperator, rhs: &Value) -> Result<Value
             (Value::Decimal(a), Value::Decimal(b)) => Ok(Value::Decimal(a - b)),
             (Value::Integer(a), Value::Decimal(b)) => Ok(Value::Decimal(*a as f64 - b)),
             (Value::Decimal(a), Value::Integer(b)) => Ok(Value::Decimal(a - *b as f64)),
-            _ => Err(runtime_error("Cannot subtract non-numeric values", "Use - with numbers only")),
+            _ => Err(runtime_error(
+                "Cannot subtract non-numeric values",
+                "Use - with numbers only",
+            )),
         },
         BinaryOperator::Mul => match (lhs, rhs) {
             (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a * b)),
             (Value::Decimal(a), Value::Decimal(b)) => Ok(Value::Decimal(a * b)),
             (Value::Integer(a), Value::Decimal(b)) => Ok(Value::Decimal(*a as f64 * b)),
             (Value::Decimal(a), Value::Integer(b)) => Ok(Value::Decimal(a * *b as f64)),
-            _ => Err(runtime_error("Cannot multiply non-numeric values", "Use * with numbers only")),
+            _ => Err(runtime_error(
+                "Cannot multiply non-numeric values",
+                "Use * with numbers only",
+            )),
         },
         BinaryOperator::Div => {
-            // Check for zero divisor first
-            let is_zero = matches!(rhs, Value::Integer(0)) || matches!(rhs, Value::Decimal(n) if *n == 0.0);
+            let is_zero =
+                matches!(rhs, Value::Integer(0)) || matches!(rhs, Value::Decimal(n) if *n == 0.0);
             if is_zero {
                 return Err(LegibleError {
                     code: ErrorCode::DivisionByZero,
@@ -735,7 +749,10 @@ fn eval_binary_op(lhs: &Value, op: &BinaryOperator, rhs: &Value) -> Result<Value
                 (Value::Decimal(a), Value::Decimal(b)) => Ok(Value::Decimal(a / b)),
                 (Value::Integer(a), Value::Decimal(b)) => Ok(Value::Decimal(*a as f64 / b)),
                 (Value::Decimal(a), Value::Integer(b)) => Ok(Value::Decimal(a / *b as f64)),
-                _ => Err(runtime_error("Cannot divide non-numeric values", "Use / with numbers only")),
+                _ => Err(runtime_error(
+                    "Cannot divide non-numeric values",
+                    "Use / with numbers only",
+                )),
             }
         }
         BinaryOperator::Mod => match (lhs, rhs) {
@@ -753,11 +770,17 @@ fn eval_binary_op(lhs: &Value, op: &BinaryOperator, rhs: &Value) -> Result<Value
                     Ok(Value::Integer(a % b))
                 }
             }
-            _ => Err(runtime_error("Modulo requires integer operands", "Use % with integers only")),
+            _ => Err(runtime_error(
+                "Modulo requires integer operands",
+                "Use % with integers only",
+            )),
         },
         BinaryOperator::Concat => match (lhs, rhs) {
             (Value::Text(a), Value::Text(b)) => Ok(Value::Text(format!("{a}{b}"))),
-            _ => Err(runtime_error("++ requires text operands", "Use ++ with text values only")),
+            _ => Err(runtime_error(
+                "++ requires text operands",
+                "Use ++ with text values only",
+            )),
         },
         BinaryOperator::Eq => Ok(Value::Boolean(lhs == rhs)),
         BinaryOperator::NotEq => Ok(Value::Boolean(lhs != rhs)),
@@ -767,11 +790,17 @@ fn eval_binary_op(lhs: &Value, op: &BinaryOperator, rhs: &Value) -> Result<Value
         BinaryOperator::LtEq => eval_comparison(lhs, rhs, |a, b| a <= b, |a, b| a <= b),
         BinaryOperator::And => match (lhs, rhs) {
             (Value::Boolean(a), Value::Boolean(b)) => Ok(Value::Boolean(*a && *b)),
-            _ => Err(runtime_error("'and' requires boolean operands", "Use 'and' with boolean values")),
+            _ => Err(runtime_error(
+                "'and' requires boolean operands",
+                "Use 'and' with boolean values",
+            )),
         },
         BinaryOperator::Or => match (lhs, rhs) {
             (Value::Boolean(a), Value::Boolean(b)) => Ok(Value::Boolean(*a || *b)),
-            _ => Err(runtime_error("'or' requires boolean operands", "Use 'or' with boolean values")),
+            _ => Err(runtime_error(
+                "'or' requires boolean operands",
+                "Use 'or' with boolean values",
+            )),
         },
     }
 }
@@ -796,7 +825,7 @@ fn eval_comparison(
 }
 
 fn match_pattern(
-    arena: &Arena,
+    arena: &Rc<Arena>,
     pattern: &Pattern,
     value: &Value,
     env: &Env,
@@ -812,29 +841,26 @@ fn match_pattern(
                 Ok(None)
             }
         }
-        Pattern::Variant { name, bindings } => {
-            match value {
-                Value::UnionVariant {
-                    variant_name,
-                    fields,
-                    ..
-                } => {
-                    if variant_name == name {
-                        let mut bound = Vec::new();
-                        for (i, binding) in bindings.iter().enumerate() {
-                            if let Some((_, val)) = fields.get(i) {
-                                bound.push((binding.clone(), val.clone()));
-                            }
+        Pattern::Variant { name, bindings } => match value {
+            Value::UnionVariant {
+                variant_name,
+                fields,
+                ..
+            } => {
+                if variant_name == name {
+                    let mut bound = Vec::new();
+                    for (i, binding) in bindings.iter().enumerate() {
+                        if let Some((_, val)) = fields.get(i) {
+                            bound.push((binding.clone(), val.clone()));
                         }
-                        Ok(Some(bound))
-                    } else {
-                        Ok(None)
                     }
+                    Ok(Some(bound))
+                } else {
+                    Ok(None)
                 }
-                // Also handle matching against literal identifiers (e.g. enum-like strings)
-                _ => Ok(None),
             }
-        }
+            _ => Ok(None),
+        },
     }
 }
 
@@ -852,150 +878,190 @@ fn is_truthy(val: &Value) -> bool {
 // ─── Higher-order builtin helpers ───────────────────────
 
 fn eval_filter(
-    arena: &Arena,
+    _arena: &Rc<Arena>,
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
 ) -> Result<Value, LegibleError> {
     if args.len() != 2 {
-        return Err(runtime_error("filter() expects 2 arguments", "Usage: filter(list, predicate)"));
+        return Err(runtime_error(
+            "filter() expects 2 arguments",
+            "Usage: filter(list, predicate)",
+        ));
     }
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(pred)) => {
             let mut result = Vec::new();
             for item in items {
-                let val = call_function(arena, pred, &[item.clone()], env, output)?;
+                let val = call_function(pred, &[item.clone()], env, output)?;
                 if let Value::Boolean(true) = val {
                     result.push(item.clone());
                 }
             }
             Ok(Value::List(result))
         }
-        _ => Err(runtime_error("filter() expects a list and a function", "Pass a list and predicate function")),
+        _ => Err(runtime_error(
+            "filter() expects a list and a function",
+            "Pass a list and predicate function",
+        )),
     }
 }
 
 fn eval_map(
-    arena: &Arena,
+    _arena: &Rc<Arena>,
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
 ) -> Result<Value, LegibleError> {
     if args.len() != 2 {
-        return Err(runtime_error("map() expects 2 arguments", "Usage: map(list, transform)"));
+        return Err(runtime_error(
+            "map() expects 2 arguments",
+            "Usage: map(list, transform)",
+        ));
     }
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(transform)) => {
             let mut result = Vec::new();
             for item in items {
-                let val = call_function(arena, transform, &[item.clone()], env, output)?;
+                let val = call_function(transform, &[item.clone()], env, output)?;
                 result.push(val);
             }
             Ok(Value::List(result))
         }
-        _ => Err(runtime_error("map() expects a list and a function", "Pass a list and transform function")),
+        _ => Err(runtime_error(
+            "map() expects a list and a function",
+            "Pass a list and transform function",
+        )),
     }
 }
 
 fn eval_reduce(
-    arena: &Arena,
+    _arena: &Rc<Arena>,
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
 ) -> Result<Value, LegibleError> {
     if args.len() != 3 {
-        return Err(runtime_error("reduce() expects 3 arguments", "Usage: reduce(list, initial, combine)"));
+        return Err(runtime_error(
+            "reduce() expects 3 arguments",
+            "Usage: reduce(list, initial, combine)",
+        ));
     }
     match (&args[0], &args[2]) {
         (Value::List(items), Value::Function(combine)) => {
             let mut acc = args[1].clone();
             for item in items {
-                acc = call_function(arena, combine, &[acc, item.clone()], env, output)?;
+                acc = call_function(combine, &[acc, item.clone()], env, output)?;
             }
             Ok(acc)
         }
-        _ => Err(runtime_error("reduce() expects a list and a combine function", "Pass a list, initial value, and combine function")),
+        _ => Err(runtime_error(
+            "reduce() expects a list and a combine function",
+            "Pass a list, initial value, and combine function",
+        )),
     }
 }
 
 fn eval_sort_by(
-    arena: &Arena,
+    _arena: &Rc<Arena>,
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
 ) -> Result<Value, LegibleError> {
     if args.len() != 2 {
-        return Err(runtime_error("sort_by() expects 2 arguments", "Usage: sort_by(list, key_fn)"));
+        return Err(runtime_error(
+            "sort_by() expects 2 arguments",
+            "Usage: sort_by(list, key_fn)",
+        ));
     }
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(key_fn)) => {
-            // Compute keys for each item
             let mut keyed: Vec<(Value, Value)> = Vec::new();
             for item in items {
-                let key = call_function(arena, key_fn, &[item.clone()], env, output)?;
+                let key = call_function(key_fn, &[item.clone()], env, output)?;
                 keyed.push((key, item.clone()));
             }
-            // Sort by key
-            keyed.sort_by(|(ka, _), (kb, _)| {
-                match (ka, kb) {
-                    (Value::Integer(a), Value::Integer(b)) => a.cmp(b),
-                    (Value::Decimal(a), Value::Decimal(b)) => a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal),
-                    (Value::Text(a), Value::Text(b)) => a.cmp(b),
-                    _ => std::cmp::Ordering::Equal,
+            keyed.sort_by(|(ka, _), (kb, _)| match (ka, kb) {
+                (Value::Integer(a), Value::Integer(b)) => a.cmp(b),
+                (Value::Decimal(a), Value::Decimal(b)) => {
+                    a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
                 }
+                (Value::Text(a), Value::Text(b)) => a.cmp(b),
+                _ => std::cmp::Ordering::Equal,
             });
             Ok(Value::List(keyed.into_iter().map(|(_, v)| v).collect()))
         }
-        _ => Err(runtime_error("sort_by() expects a list and a key function", "Pass a list and key function")),
+        _ => Err(runtime_error(
+            "sort_by() expects a list and a key function",
+            "Pass a list and key function",
+        )),
     }
 }
 
 fn eval_take(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
-        return Err(runtime_error("take() expects 2 arguments", "Usage: take(list, count)"));
+        return Err(runtime_error(
+            "take() expects 2 arguments",
+            "Usage: take(list, count)",
+        ));
     }
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Integer(n)) => {
             let n = *n as usize;
             Ok(Value::List(items.iter().take(n).cloned().collect()))
         }
-        _ => Err(runtime_error("take() expects a list and integer", "Pass a list and count")),
+        _ => Err(runtime_error(
+            "take() expects a list and integer",
+            "Pass a list and count",
+        )),
     }
 }
 
 fn eval_drop(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
-        return Err(runtime_error("drop() expects 2 arguments", "Usage: drop(list, count)"));
+        return Err(runtime_error(
+            "drop() expects 2 arguments",
+            "Usage: drop(list, count)",
+        ));
     }
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Integer(n)) => {
             let n = *n as usize;
             Ok(Value::List(items.iter().skip(n).cloned().collect()))
         }
-        _ => Err(runtime_error("drop() expects a list and integer", "Pass a list and count")),
+        _ => Err(runtime_error(
+            "drop() expects a list and integer",
+            "Pass a list and count",
+        )),
     }
 }
 
 fn eval_find(
-    arena: &Arena,
+    _arena: &Rc<Arena>,
     args: &[Value],
     env: &Env,
     output: &mut dyn std::io::Write,
 ) -> Result<Value, LegibleError> {
     if args.len() != 2 {
-        return Err(runtime_error("find() expects 2 arguments", "Usage: find(list, predicate)"));
+        return Err(runtime_error(
+            "find() expects 2 arguments",
+            "Usage: find(list, predicate)",
+        ));
     }
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(pred)) => {
             for item in items {
-                let val = call_function(arena, pred, &[item.clone()], env, output)?;
+                let val = call_function(pred, &[item.clone()], env, output)?;
                 if let Value::Boolean(true) = val {
                     return Ok(item.clone());
                 }
             }
             Ok(Value::None)
         }
-        _ => Err(runtime_error("find() expects a list and a function", "Pass a list and predicate")),
+        _ => Err(runtime_error(
+            "find() expects a list and a function",
+            "Pass a list and predicate",
+        )),
     }
 }
 

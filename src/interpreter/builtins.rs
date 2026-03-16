@@ -45,6 +45,11 @@ pub fn register_builtins(env: &Env) {
         // Type conversion
         ("to_integer", builtin_to_integer),
         ("to_decimal", builtin_to_decimal),
+        // Additional text operations
+        ("replace", builtin_replace),
+        ("substring", builtin_substring),
+        ("contains_text", builtin_contains_text),
+        ("index_of", builtin_index_of),
     ];
 
     for (name, func) in builtins {
@@ -441,5 +446,60 @@ fn builtin_to_decimal(args: &[Value]) -> Result<Value, LegibleError> {
         Some(Value::Integer(n)) => Ok(Value::Decimal(*n as f64)),
         Some(Value::Decimal(n)) => Ok(Value::Decimal(*n)),
         _ => Err(builtin_error("to_decimal() expects text or number", "Pass a text or number value")),
+    }
+}
+
+fn builtin_replace(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 3 {
+        return Err(builtin_error("replace() expects 3 arguments", "Usage: replace(str, from, to)"));
+    }
+    match (&args[0], &args[1], &args[2]) {
+        (Value::Text(s), Value::Text(from), Value::Text(to)) => {
+            Ok(Value::Text(s.replace(from.as_str(), to.as_str())))
+        }
+        _ => Err(builtin_error("replace() expects three text arguments", "Pass three text values")),
+    }
+}
+
+fn builtin_substring(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 3 {
+        return Err(builtin_error("substring() expects 3 arguments", "Usage: substring(str, start, length)"));
+    }
+    match (&args[0], &args[1], &args[2]) {
+        (Value::Text(s), Value::Integer(start), Value::Integer(length)) => {
+            let start = *start as usize;
+            let length = *length as usize;
+            let chars: Vec<char> = s.chars().collect();
+            let end = (start + length).min(chars.len());
+            let start = start.min(chars.len());
+            let result: String = chars[start..end].iter().collect();
+            Ok(Value::Text(result))
+        }
+        _ => Err(builtin_error("substring() expects text, integer, integer", "Pass text and two integers")),
+    }
+}
+
+fn builtin_contains_text(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 2 {
+        return Err(builtin_error("contains_text() expects 2 arguments", "Usage: contains_text(str, substr)"));
+    }
+    match (&args[0], &args[1]) {
+        (Value::Text(s), Value::Text(sub)) => Ok(Value::Boolean(s.contains(sub.as_str()))),
+        _ => Err(builtin_error("contains_text() expects two text arguments", "Pass two text values")),
+    }
+}
+
+fn builtin_index_of(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 2 {
+        return Err(builtin_error("index_of() expects 2 arguments", "Usage: index_of(str, substr)"));
+    }
+    match (&args[0], &args[1]) {
+        (Value::Text(s), Value::Text(sub)) => {
+            match s.find(sub.as_str()) {
+                Some(pos) => Ok(Value::Integer(pos as i64)),
+                None => Ok(Value::None),
+            }
+        }
+        _ => Err(builtin_error("index_of() expects two text arguments", "Pass two text values")),
     }
 }

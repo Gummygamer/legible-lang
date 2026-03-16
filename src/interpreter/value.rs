@@ -1,8 +1,10 @@
 /// Runtime value types for the Legible interpreter.
 use std::fmt;
+use std::rc::Rc;
 
 use crate::errors::LegibleError;
 use crate::interpreter::environment::Env;
+use crate::parser::arena::Arena;
 use crate::parser::ast::{NodeId, Param};
 
 /// A runtime value in Legible.
@@ -121,6 +123,9 @@ impl PartialEq for Value {
 }
 
 /// A callable value — user-defined function, lambda, or builtin.
+///
+/// UserDefined and Lambda variants carry an `Rc<Arena>` so that functions
+/// loaded from different modules can reference their own AST nodes.
 #[derive(Clone)]
 pub enum Callable {
     UserDefined {
@@ -131,16 +136,30 @@ pub enum Callable {
         ensures: Vec<NodeId>,
         body: Vec<NodeId>,
         closure_env: Env,
+        source_arena: Rc<Arena>,
     },
     Lambda {
         params: Vec<Param>,
         body: NodeId,
         closure_env: Env,
+        source_arena: Rc<Arena>,
     },
     Builtin {
         name: String,
         func: fn(&[Value]) -> Result<Value, LegibleError>,
     },
+}
+
+impl Callable {
+    /// Get the arena that contains this callable's AST nodes.
+    pub fn arena(&self) -> Option<&Arena> {
+        match self {
+            Self::UserDefined { source_arena, .. } | Self::Lambda { source_arena, .. } => {
+                Some(source_arena.as_ref())
+            }
+            Self::Builtin { .. } => None,
+        }
+    }
 }
 
 impl fmt::Debug for Callable {

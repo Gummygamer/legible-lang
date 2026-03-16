@@ -153,6 +153,9 @@ fn cmd_fmt(file: &str, write_back: bool) {
 
 fn cmd_repl() {
     use legible_lang::interpreter::builtins::register_builtins;
+    use legible_lang::interpreter::http_builtins::register_http_builtins;
+    use legible_lang::interpreter::io_builtins::register_io_builtins;
+    use legible_lang::interpreter::json_builtins::register_json_builtins;
     use legible_lang::interpreter::sdl_builtins::register_sdl_builtins;
     use legible_lang::interpreter::environment::Environment;
 
@@ -160,6 +163,9 @@ fn cmd_repl() {
     let env = Environment::new();
     register_builtins(&env);
     register_sdl_builtins(&env);
+    register_http_builtins(&env);
+    register_json_builtins(&env);
+    register_io_builtins(&env);
 
     let stdin = std::io::stdin();
     let mut line = String::new();
