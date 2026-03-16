@@ -286,16 +286,24 @@ fn builtin_get(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 2 {
         return Err(builtin_error("get() expects 2 arguments", "Usage: get(map, key)"));
     }
-    match &args[0] {
-        Value::Mapping(entries) => {
+    match (&args[0], &args[1]) {
+        (Value::Mapping(entries), key) => {
             for (k, v) in entries {
-                if k == &args[1] {
+                if k == key {
                     return Ok(v.clone());
                 }
             }
             Ok(Value::None)
         }
-        _ => Err(builtin_error("get() expects a mapping as first argument", "Pass a mapping")),
+        (Value::List(items), Value::Integer(index)) => {
+            let i = *index as usize;
+            if i < items.len() {
+                Ok(items[i].clone())
+            } else {
+                Ok(Value::None)
+            }
+        }
+        _ => Err(builtin_error("get() expects a mapping or list as first argument", "Pass a mapping and key, or a list and integer index")),
     }
 }
 

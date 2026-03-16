@@ -26,6 +26,8 @@ pub fn register_io_builtins(env: &Env) {
         ("file_exists", builtin_file_exists),
         ("current_time_ms", builtin_current_time_ms),
         ("log", builtin_log),
+        ("url_decode", builtin_url_decode),
+        ("random_hex", builtin_random_hex),
     ];
 
     for (name, func) in builtins {
@@ -139,4 +141,129 @@ fn builtin_log(args: &[Value]) -> Result<Value, LegibleError> {
 
     eprintln!("[{timestamp}] [{level}] {message}");
     Ok(Value::None)
+}
+
+/// `url_decode(str: text): text`
+///
+/// Percent-decode a URL-encoded string (e.g., form body values).
+/// Converts `+` to space and `%XX` hex sequences to their byte values.
+fn builtin_url_decode(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 1 {
+        return Err(io_error(
+            "url_decode() expects 1 argument",
+            "Usage: url_decode(encoded_string)",
+        ));
+    }
+    let input = match &args[0] {
+        Value::Text(s) => s,
+        _ => {
+            return Err(io_error(
+                "url_decode() expects a text argument",
+                "Pass a URL-encoded text string",
+            ))
+        }
+    };
+
+    let mut result = Vec::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => {
+                result.push(b' ');
+                i += 1;
+            }
+            b'%' if i + 2 < bytes.len() => {
+                let hi = bytes[i + 1];
+                let lo = bytes[i + 2];
+                if let (Some(h), Some(l)) = (hex_val(hi), hex_val(lo)) {
+                    result.push(h << 4 | l);
+                    i += 3;
+                } else {
+                    result.push(b'%');
+                    i += 1;
+                }
+            }
+            b => {
+                result.push(b);
+                i += 1;
+            }
+        }
+    }
+
+    let decoded = String::from_utf8(result).unwrap_or_else(|_| input.clone());
+    Ok(Value::Text(decoded))
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// `random_hex(length: integer): text`
+///
+/// Generate a random hexadecimal string of the given length.
+/// Uses `/dev/urandom` on Unix systems for cryptographic randomness.
+fn builtin_random_hex(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 1 {
+        return Err(io_error(
+            "random_hex() expects 1 argument",
+            "Usage: random_hex(length)",
+        ));
+    }
+    let length = match &args[0] {
+        Value::Integer(n) if *n > 0 => *n as usize,
+        Value::Integer(_) => {
+            return Err(io_error(
+                "random_hex() expects a positive integer",
+                "Pass a positive integer for the hex string length",
+            ))
+        }
+        _ => {
+            return Err(io_error(
+                "random_hex() expects an integer",
+                "Pass an integer for the hex string length",
+            ))
+        }
+    };
+
+    // Read random bytes and convert to hex
+    let num_bytes = (length + 1) / 2;
+    let random_bytes = {
+        use std::io::Read;
+        let mut bytes = vec![0u8; num_bytes];
+        std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut bytes).map(|_| bytes))
+    }
+    .or_else(|_| {
+        // Fallback: use system time + counter for basic randomness
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(42);
+        let mut bytes = Vec::with_capacity(num_bytes);
+        let mut state = seed;
+        for _ in 0..num_bytes {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            bytes.push((state >> 33) as u8);
+        }
+        Ok(bytes)
+    })
+    .map_err(|e: std::io::Error| {
+        io_error(
+            &format!("Failed to generate random bytes: {e}"),
+            "System randomness unavailable",
+        )
+    })?;
+
+    let hex: String = random_bytes
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+
+    Ok(Value::Text(hex[..length].to_string()))
 }

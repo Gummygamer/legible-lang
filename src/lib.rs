@@ -8,7 +8,7 @@ pub mod interpreter;
 pub mod lexer;
 pub mod parser;
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -68,7 +68,7 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
         .unwrap_or(Path::new("."))
         .to_path_buf();
     let arena_rc = Rc::new(arena);
-    load_modules(&arena_rc, root, &base_dir, &env, &mut HashSet::new())?;
+    load_modules(&arena_rc, root, &base_dir, &env, &mut HashMap::new())?;
 
     // Evaluate
     let mut output = Vec::new();
@@ -87,7 +87,7 @@ fn load_modules(
     root: parser::ast::NodeId,
     base_dir: &Path,
     env: &interpreter::environment::Env,
-    loaded: &mut HashSet<String>,
+    loaded: &mut HashMap<String, Value>,
 ) -> Result<(), LegibleError> {
     let statements = match &arena.get(root).kind {
         NodeKind::Program { statements } => statements.clone(),
@@ -97,10 +97,13 @@ fn load_modules(
     for &stmt_id in &statements {
         if let NodeKind::UseDecl { module_name } = &arena.get(stmt_id).kind {
             let module_name = module_name.clone();
-            if loaded.contains(&module_name) {
+
+            // If already loaded, reuse the cached module record
+            if let Some(cached_record) = loaded.get(&module_name) {
+                env.borrow_mut()
+                    .define(module_name, cached_record.clone(), false);
                 continue;
             }
-            loaded.insert(module_name.clone());
 
             let module_path = find_module_file(&module_name, base_dir)?;
             let module_source = std::fs::read_to_string(&module_path).map_err(|e| {
@@ -167,12 +170,14 @@ fn load_modules(
                 }
             }
 
-            // Also make all module functions available directly (not just public ones via record)
-            // for convenience — the record enables `module.func()` access
             let module_record = Value::Record {
                 type_name: module_name.clone(),
                 fields: module_fields,
             };
+
+            // Cache the module record for reuse by other modules
+            loaded.insert(module_name.clone(), module_record.clone());
+
             env.borrow_mut()
                 .define(module_name, module_record, false);
         }
