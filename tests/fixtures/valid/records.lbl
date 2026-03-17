@@ -1,0 +1,20 @@
+record Point
+  x: integer
+  y: integer
+end
+
+function translate(point: Point, dx: integer, dy: integer): Point
+  intent: return a new point shifted by the given offsets
+  point with { x: point.x + dx, y: point.y + dy }
+end
+
+function main(): nothing
+  intent: demonstrate record construction and functional update
+  let origin: Point = Point { x: 0, y: 0 }
+  let p1: Point = translate(origin, 3, 4)
+  print("x: " ++ to_text(p1.x))
+  print("y: " ++ to_text(p1.y))
+  let p2: Point = p1 with { x: 10 }
+  print("x: " ++ to_text(p2.x))
+  print("y: " ++ to_text(p2.y))
+end

@@ -1,0 +1,12 @@
+function main(): nothing
+  intent: demonstrate mapping creation and key lookup operations
+  let scores: a mapping from text to integer = {"alice": 90, "bob": 75, "carol": 85}
+  print(to_text(has_key(scores, "alice")))
+  print(to_text(has_key(scores, "dave")))
+  let updated: a mapping from text to integer = put(scores, "dave", 60)
+  print(to_text(has_key(updated, "dave")))
+  let alice_score: an optional integer = get(scores, "alice")
+  print(to_text(unwrap_or(alice_score, 0)))
+  let all_keys: a list of text = keys(scores)
+  print(to_text(length(all_keys)))
+end

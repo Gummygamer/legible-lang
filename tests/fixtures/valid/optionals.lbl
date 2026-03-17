@@ -1,0 +1,15 @@
+function find_even(nums: a list of integer): an optional integer
+  intent: find the first even number in a list
+  find(nums, fn(n: integer): boolean => n % 2 == 0)
+end
+
+function main(): nothing
+  intent: demonstrate optional finding and unwrapping operations
+  let nums: a list of integer = [1, 3, 4, 7, 8]
+  let maybe_even: an optional integer = find_even(nums)
+  print(to_text(is_some(maybe_even)))
+  print(to_text(unwrap_or(maybe_even, -1)))
+  let no_even: an optional integer = find_even([1, 3, 5])
+  print(to_text(is_none(no_even)))
+  print(to_text(unwrap_or(no_even, -1)))
+end

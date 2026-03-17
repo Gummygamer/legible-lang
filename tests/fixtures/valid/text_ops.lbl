@@ -1,0 +1,10 @@
+function main(): nothing
+  intent: demonstrate text manipulation builtins
+  let greeting: text = "Hello, World!"
+  print(to_text(contains_text(greeting, "World")))
+  print(replace(greeting, "World", "Legible"))
+  print(substring(greeting, 0, 5))
+  let parts: a list of text = split(greeting, ", ")
+  print(join(parts, " | "))
+  print(to_text(text_length(greeting)))
+end

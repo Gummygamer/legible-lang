@@ -42,7 +42,12 @@ legible-lang/
 │   │   ├── evaluator.rs        # Tree-walking evaluator
 │   │   ├── environment.rs      # Scope chain with Rc<RefCell<>> interiors
 │   │   ├── value.rs            # Runtime value enum
-│   │   └── builtins.rs         # Standard library functions
+│   │   ├── builtins.rs         # Standard library functions
+│   │   ├── http_builtins.rs    # HTTP server builtins (tiny_http)
+│   │   ├── json_builtins.rs    # JSON encode/decode builtins (serde_json)
+│   │   ├── io_builtins.rs      # File I/O builtins (read/write/exists)
+│   │   ├── db_builtins.rs      # SQLite database builtins (rusqlite)
+│   │   └── sdl_builtins.rs     # SDL2 graphics/input builtins (sdl2)
 │   ├── formatter/
 │   │   ├── mod.rs
 │   │   └── canonical.rs        # Canonical form formatter
@@ -53,19 +58,15 @@ legible-lang/
 │   ├── integration.rs          # End-to-end .lbl file tests
 │   └── fixtures/
 │       ├── valid/
-│       │   ├── hello.lbl
-│       │   ├── hello.expected
-│       │   ├── fizzbuzz.lbl
-│       │   ├── fizzbuzz.expected
-│       │   ├── pipelines.lbl
-│       │   ├── pipelines.expected
-│       │   ├── contracts.lbl
-│       │   ├── contracts.expected
-│       │   └── ...
-│       └── errors/
-│           ├── type_mismatch.lbl
-│           ├── type_mismatch.error.json
-│           └── ...
+│       │   ├── hello.lbl / hello.expected
+│       │   ├── fizzbuzz.lbl / fizzbuzz.expected
+│       │   ├── pipelines.lbl / pipelines.expected
+│       │   ├── contracts.lbl / contracts.expected
+│       │   ├── records.lbl / records.expected
+│       │   ├── mappings.lbl / mappings.expected
+│       │   ├── optionals.lbl / optionals.expected
+│       │   └── text_ops.lbl / text_ops.expected
+│       └── errors/             # Error case fixtures (currently empty)
 └── benches/
     └── interpreter_bench.rs    # Criterion benchmarks
 ```
@@ -74,14 +75,16 @@ legible-lang/
 
 Keep dependencies minimal. Approved crates:
 
-| Crate        | Purpose                          |
-|--------------|----------------------------------|
-| `clap`       | CLI argument parsing (derive)    |
-| `serde`      | Serialization (error output)     |
-| `serde_json` | JSON error reporting             |
-| `miette`     | Dev-mode human-readable errors   |
-| `logos`      | Lexer generator (optional)       |
-| `criterion`  | Benchmarking (dev-dependency)    |
+| Crate        | Purpose                                   |
+|--------------|-------------------------------------------|
+| `clap`       | CLI argument parsing (derive)             |
+| `serde`      | Serialization (error output)              |
+| `serde_json` | JSON error reporting + json builtins      |
+| `miette`     | Dev-mode human-readable errors            |
+| `tiny_http`  | Synchronous HTTP server for web builtins  |
+| `sdl2`       | SDL2 bindings for graphics/input builtins |
+| `rusqlite`   | SQLite bindings for database builtins     |
+| `criterion`  | Benchmarking (dev-dependency)             |
 
 Do **not** add runtime dependencies beyond these without justification. No async runtime. No allocator crates. Keep the binary lean.
 
@@ -96,11 +99,18 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 
+[[bin]]
+name = "legible"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 miette = { version = "7", features = ["fancy"] }
+sdl2 = "0.37"
+tiny_http = "0.12"
+rusqlite = { version = "0.39", features = ["bundled"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -795,6 +805,12 @@ fn register_builtins(env: &Env) {
 - `is_some(opt: an optional T): boolean`
 - `is_none(opt: an optional T): boolean`
 
+**Additional text operations** (in `builtins.rs`):
+- `replace(str: text, from: text, to: text): text` — replace all occurrences of `from` with `to`
+- `substring(str: text, start: integer, length: integer): text` — extract substring by offset and length
+- `contains_text(str: text, substr: text): boolean` — check if string contains substring
+- `index_of(str: text, substr: text): an optional integer` — find first occurrence index
+
 **Math:**
 - `abs(n: decimal): decimal`
 - `max(a: decimal, b: decimal): decimal`
@@ -806,6 +822,45 @@ fn register_builtins(env: &Env) {
 **Type conversion:**
 - `to_integer(value: text): an optional integer`
 - `to_decimal(value: text): an optional decimal`
+
+### HTTP Builtins (`http_builtins.rs`)
+
+Uses `tiny_http` (synchronous, no async runtime). All state is stored in a `thread_local` `RefCell`.
+
+- `http_start(port: integer): nothing` — bind and start HTTP server on given port
+- `http_next_request(): Request` — block until next request arrives; returns a `Record` with fields `method`, `path`, `body`, `query`, `headers`
+- `http_respond(status: integer, body: text): nothing` — send plain-text response to the current request
+- `http_respond_with_headers(status: integer, headers: a mapping from text to text, body: text): nothing` — send response with custom headers
+- `http_stop(): nothing` — stop the HTTP server
+
+### JSON Builtins (`json_builtins.rs`)
+
+Uses `serde_json`.
+
+- `json_parse(str: text): Value` — parse a JSON string into a Legible value (objects → mapping, arrays → list, strings → text, numbers → integer or decimal, booleans → boolean, null → none)
+- `json_encode(value: T): text` — serialize any Legible value to a JSON string
+
+### File I/O Builtins (`io_builtins.rs`)
+
+- `read_file(path: text): text` — read entire file contents as text
+- `write_file(path: text, content: text): nothing` — write text to file (creates or overwrites)
+- `file_exists(path: text): boolean` — check if a path exists
+
+### Database Builtins (`db_builtins.rs`)
+
+Uses `rusqlite` (bundled SQLite). State stored in a `thread_local` `RefCell<Option<Connection>>`. WAL mode and foreign keys are enabled on `db_open`. All column values are returned as `text` for consistency with `a mapping from text to text`.
+
+- `db_open(path: text): nothing` — open or create a SQLite database at the given path
+- `db_close(): nothing` — close the current database connection
+- `db_exec(sql: text): nothing` — execute a SQL statement (no result rows)
+- `db_exec_params(sql: text, params: a list of text): nothing` — execute a parameterised SQL statement with bound values
+- `db_query(sql: text): a list of a mapping from text to text` — run a query and return all rows as a list of column-name→value mappings
+- `db_query_params(sql: text, params: a list of text): a list of a mapping from text to text` — parameterised query returning rows
+
+### Utility Builtins (`builtins.rs`)
+
+- `current_time_ms(): integer` — current Unix timestamp in milliseconds
+- `log(level: text, message: text): nothing` — write a log line to stderr in the format `[LEVEL] message`
 
 ---
 
@@ -1035,30 +1090,32 @@ mod tests {
 In `tests/integration.rs`, run `.lbl` fixture files through the full pipeline:
 
 ```rust
-use std::fs;
-
 fn run_fixture(name: &str) {
-    let source = fs::read_to_string(
-        format!("tests/fixtures/valid/{name}.lbl")
-    ).unwrap();
-    let expected = fs::read_to_string(
-        format!("tests/fixtures/valid/{name}.expected")
-    ).unwrap();
+    let source = fs::read_to_string(format!("tests/fixtures/valid/{name}.lbl")).unwrap();
+    let expected = fs::read_to_string(format!("tests/fixtures/valid/{name}.expected")).unwrap();
     let output = legible_lang::run_source(&source).unwrap();
-    assert_eq!(output.trim(), expected.trim());
+    assert_eq!(output.trim(), expected.trim(), "Fixture {name} mismatch");
 }
-
-#[test] fn test_hello() { run_fixture("hello"); }
-#[test] fn test_fizzbuzz() { run_fixture("fizzbuzz"); }
-#[test] fn test_pipelines() { run_fixture("pipelines"); }
-#[test] fn test_contracts() { run_fixture("contracts"); }
 ```
 
-For error fixtures, assert that the emitted JSON matches the `.error.json` file.
+Current fixture coverage in `tests/fixtures/valid/`:
 
-### Property Tests (Optional but Encouraged)
+| Fixture       | Features tested                               |
+|---------------|-----------------------------------------------|
+| `hello`       | Basic function, print                         |
+| `fizzbuzz`    | if/else expression, range, for loop, modulo   |
+| `pipelines`   | Records, filter/sort_by/map, pipeline `\|>`   |
+| `contracts`   | requires/ensures, record update with `with`   |
+| `records`     | Record construction, field access, `with`     |
+| `mappings`    | Mapping literal, has_key, get, put, keys      |
+| `optionals`   | find, is_some, is_none, unwrap_or             |
+| `text_ops`    | contains_text, replace, substring, split/join |
 
-- Formatter idempotency: `assert_eq!(fmt(source), fmt(fmt(source)))`
+For error fixtures, assert that `run_source` returns `Err`. Avoid HTTP/DB fixtures in CI since they require live infrastructure.
+
+### Property Tests
+
+- **Formatter idempotency**: `assert_eq!(fmt(source), fmt(fmt(source)))` — already tested in `test_formatter_idempotency` for all valid fixtures
 - Parse-then-format round-trip: `assert_eq!(fmt(source), fmt(parse_then_print(source)))`
 
 ---
