@@ -17,9 +17,33 @@ A programming language designed to be optimal for LLMs to write, read, and reaso
 
 ## Installation
 
+### Global install (recommended)
+
+Requires [Rust](https://rustup.rs) (stable toolchain).
+
 ```bash
 git clone https://github.com/darabat/legible
 cd legible
+cargo install --path .
+```
+
+This builds a release binary and places it in `~/.cargo/bin/legible`, which is on your `PATH` if you installed Rust via rustup. After that, `legible` works from any directory.
+
+**Update** after pulling new changes:
+
+```bash
+cargo install --path .
+```
+
+**Uninstall:**
+
+```bash
+cargo uninstall legible-lang
+```
+
+### Build only (no global install)
+
+```bash
 cargo build --release
 # Binary at target/release/legible
 ```

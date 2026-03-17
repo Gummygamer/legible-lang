@@ -18,8 +18,10 @@ use interpreter::builtins::register_builtins;
 use interpreter::crypto_builtins::register_crypto_builtins;
 use interpreter::db_builtins::register_db_builtins;
 use interpreter::http_builtins::register_http_builtins;
+use interpreter::http_client_builtins::register_http_client_builtins;
 use interpreter::io_builtins::register_io_builtins;
 use interpreter::json_builtins::register_json_builtins;
+use interpreter::process_builtins::register_process_builtins;
 use interpreter::sdl_builtins::register_sdl_builtins;
 use interpreter::value::Value;
 use parser::ast::NodeKind;
@@ -62,9 +64,11 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
     register_crypto_builtins(&env);
     register_sdl_builtins(&env);
     register_http_builtins(&env);
+    register_http_client_builtins(&env);
     register_json_builtins(&env);
     register_io_builtins(&env);
     register_db_builtins(&env);
+    register_process_builtins(&env);
 
     // Load modules referenced by `use` declarations
     let base_dir = Path::new(filename)
@@ -78,6 +82,64 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
     let mut output = Vec::new();
     interpreter::evaluate_program_rc(&arena_rc, root, &env, &mut output)?;
     Ok(String::from_utf8_lossy(&output).to_string())
+}
+
+/// Run a Legible source string with streaming output to the given writer.
+///
+/// Unlike `run_source_with_filename`, this writes print output immediately
+/// to the provided writer rather than buffering it. This is essential for
+/// interactive programs like REPLs that need real-time output.
+pub fn run_source_streaming(
+    source: &str,
+    filename: &str,
+    output: &mut dyn std::io::Write,
+) -> Result<(), LegibleError> {
+    let tokens = lexer::scan(source)?;
+    let mut parser_inst = parser::Parser::new(tokens, filename, source);
+    let root = parser_inst.parse_program()?;
+    let arena = parser_inst.arena;
+
+    // Run static analysis
+    let contract_errors = analyzer::contracts::check_contracts(&arena, root);
+    for err in &contract_errors {
+        err.emit_json();
+    }
+    if contract_errors
+        .iter()
+        .any(|e| matches!(e.severity, errors::Severity::Error))
+    {
+        return Err(contract_errors.into_iter().next().unwrap());
+    }
+
+    // Intent verification (warnings only)
+    let intent_warnings = analyzer::intent::verify_intents(&arena, root);
+    for warning in &intent_warnings {
+        warning.emit_json();
+    }
+
+    // Set up environment with all builtins
+    let env = Environment::new();
+    register_builtins(&env);
+    register_crypto_builtins(&env);
+    register_sdl_builtins(&env);
+    register_http_builtins(&env);
+    register_http_client_builtins(&env);
+    register_json_builtins(&env);
+    register_io_builtins(&env);
+    register_db_builtins(&env);
+    register_process_builtins(&env);
+
+    // Load modules referenced by `use` declarations
+    let base_dir = Path::new(filename)
+        .parent()
+        .unwrap_or(Path::new("."))
+        .to_path_buf();
+    let arena_rc = Rc::new(arena);
+    load_modules(&arena_rc, root, &base_dir, &env, &mut HashMap::new())?;
+
+    // Evaluate with streaming output
+    interpreter::evaluate_program_rc(&arena_rc, root, &env, output)?;
+    Ok(())
 }
 
 /// Scan a program's AST for `use` declarations and load the referenced modules.

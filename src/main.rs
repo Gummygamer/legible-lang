@@ -51,8 +51,9 @@ fn cmd_run(file: &str) {
             process::exit(1);
         }
     };
-    match legible_lang::run_source_with_filename(&source, file) {
-        Ok(output) => print!("{output}"),
+    let mut stdout = std::io::stdout();
+    match legible_lang::run_source_streaming(&source, file, &mut stdout) {
+        Ok(()) => {}
         Err(e) => {
             e.emit_json();
             eprintln!("{e}");
@@ -156,8 +157,10 @@ fn cmd_repl() {
     use legible_lang::interpreter::crypto_builtins::register_crypto_builtins;
     use legible_lang::interpreter::db_builtins::register_db_builtins;
     use legible_lang::interpreter::http_builtins::register_http_builtins;
+    use legible_lang::interpreter::http_client_builtins::register_http_client_builtins;
     use legible_lang::interpreter::io_builtins::register_io_builtins;
     use legible_lang::interpreter::json_builtins::register_json_builtins;
+    use legible_lang::interpreter::process_builtins::register_process_builtins;
     use legible_lang::interpreter::sdl_builtins::register_sdl_builtins;
     use legible_lang::interpreter::environment::Environment;
 
@@ -167,9 +170,11 @@ fn cmd_repl() {
     register_crypto_builtins(&env);
     register_sdl_builtins(&env);
     register_http_builtins(&env);
+    register_http_client_builtins(&env);
     register_json_builtins(&env);
     register_io_builtins(&env);
     register_db_builtins(&env);
+    register_process_builtins(&env);
 
     let stdin = std::io::stdin();
     let mut line = String::new();
