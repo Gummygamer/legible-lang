@@ -8,15 +8,57 @@ use crate::parser::ast::*;
 
 /// Stop words filtered from intent text.
 const STOP_WORDS: &[&str] = &[
+    // Articles, prepositions, conjunctions
     "a", "the", "an", "is", "to", "of", "that", "for", "and", "or", "it", "in", "by", "with",
     "from", "on", "at", "this", "be", "as", "its", "has", "have", "are", "was", "were", "will",
-    "can", "should", "given", "into",
+    "can", "should", "given", "into", "using", "via", "based", "if", "when", "then", "else",
+    "no", "not", "also", "they", "do", "already", "against", "whether", "only", "up", "out",
+    "so", "yet", "both", "which", "who", "whom", "whose", "where", "after", "before", "between",
+    // Common adjectives / quantifiers in intent descriptions
+    "all", "each", "any", "new", "current", "correct", "appropriate", "valid", "invalid",
+    "single", "multiple", "empty", "first", "last", "next", "previous", "optional", "formatted",
+    "associated", "related", "available", "required", "given",
+    // Common descriptive nouns used in intent strings that have no verifiable code signal
+    "function", "functions", "type", "types", "value", "values", "code", "codes",
+    "content", "builder", "helper", "module", "result", "results", "number", "numbers",
+    "string", "strings", "entry", "entries", "item", "items", "record", "records",
+    "field", "fields", "list", "mapping", "row", "rows", "table", "tables",
+    "page", "handler", "form", "info", "data", "database", "message", "error",
+    "request", "requests", "response", "responses",
+    // UI / domain meta-words that describe purpose rather than code
+    "landing", "registration", "language", "site", "navigation", "footer", "header",
+    "banner", "hero", "showcasing", "overview", "listing",
 ];
 
-/// Generic intent keywords that always match (they're too vague to verify).
+/// Generic intent keywords that always match (they're too vague to verify against code signals).
 const GENERIC_KEYWORDS: &[&str] = &[
+    // General action verbs
     "return", "produce", "compute", "calculate", "create", "make", "build", "generate",
     "process", "handle", "perform", "execute", "run", "do", "get", "set", "check",
+    // Verification / assertion
+    "verify", "ensure", "confirm", "validate", "assert",
+    // Data transformation
+    "parse", "format", "encode", "decode", "serialize", "deserialize", "convert", "transform",
+    // CRUD / mutation
+    "insert", "update", "delete", "remove", "clear", "reset", "increment", "decrement",
+    // Lifecycle
+    "open", "close", "start", "stop", "initialize", "init", "register", "configure", "setup",
+    // Output / rendering
+    "render", "display", "output", "show", "print", "emit", "write", "send", "respond", "reply",
+    // Storage / retrieval
+    "load", "save", "store", "persist", "retrieve", "fetch", "read",
+    // Lookup
+    "find", "search", "lookup", "query", "match",
+    // Collection
+    "add", "append", "collect", "combine", "merge", "wrap", "apply",
+    // Communication
+    "request", "receive",
+    // Description helpers
+    "demonstrate", "test", "use",
+    // HTTP / web framework verbs
+    "route", "redirect", "authenticate", "render", "serve", "dispatch",
+    // Session / auth
+    "login", "logout", "register",
 ];
 
 /// Verify the intent of all functions in the AST. Returns warnings for mismatches.
@@ -193,7 +235,8 @@ fn collect_signals(arena: &Arena, node_id: NodeId, signals: &mut BodySignals) {
                 collect_signals(arena, *val, signals);
             }
         }
-        NodeKind::RecordConstruct { fields, .. } => {
+        NodeKind::RecordConstruct { type_name, fields } => {
+            signals.identifiers.push(type_name.to_lowercase());
             for (name, val) in fields {
                 signals.field_names.push(name.to_lowercase());
                 collect_signals(arena, *val, signals);
@@ -212,6 +255,26 @@ fn collect_signals(arena: &Arena, node_id: NodeId, signals: &mut BodySignals) {
                     collect_signals(arena, s, signals);
                 }
             }
+        }
+        NodeKind::MappingLit { entries } => {
+            for (k, v) in entries {
+                collect_signals(arena, *k, signals);
+                collect_signals(arena, *v, signals);
+            }
+        }
+        NodeKind::ListLit { elements } => {
+            for &elem in elements {
+                collect_signals(arena, elem, signals);
+            }
+        }
+        NodeKind::WhileLoop { condition, body } => {
+            collect_signals(arena, *condition, signals);
+            for &s in body {
+                collect_signals(arena, s, signals);
+            }
+        }
+        NodeKind::SetStatement { value, .. } => {
+            collect_signals(arena, *value, signals);
         }
         _ => {}
     }
