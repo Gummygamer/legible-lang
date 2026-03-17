@@ -2,6 +2,7 @@
 ///
 /// Tree-walking evaluator with scope-chained environments.
 pub mod builtins;
+pub mod crypto_builtins;
 pub mod db_builtins;
 pub mod environment;
 pub mod evaluator;

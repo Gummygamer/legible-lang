@@ -106,6 +106,8 @@ pub enum ErrorCode {
     IndexOutOfBounds,
     #[serde(rename = "E_INTENT_MISMATCH")]
     IntentMismatch,
+    #[serde(rename = "E_RUNTIME_ERROR")]
+    RuntimeError,
 }
 
 impl std::fmt::Display for ErrorCode {

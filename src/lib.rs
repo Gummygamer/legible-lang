@@ -15,6 +15,7 @@ use std::rc::Rc;
 use errors::LegibleError;
 use interpreter::environment::Environment;
 use interpreter::builtins::register_builtins;
+use interpreter::crypto_builtins::register_crypto_builtins;
 use interpreter::db_builtins::register_db_builtins;
 use interpreter::http_builtins::register_http_builtins;
 use interpreter::io_builtins::register_io_builtins;
@@ -58,6 +59,7 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
     // Set up environment with all builtins
     let env = Environment::new();
     register_builtins(&env);
+    register_crypto_builtins(&env);
     register_sdl_builtins(&env);
     register_http_builtins(&env);
     register_json_builtins(&env);
@@ -135,6 +137,7 @@ fn load_modules(
             // Set up a fresh env for the module (with builtins)
             let mod_env = Environment::new();
             register_builtins(&mod_env);
+            register_crypto_builtins(&mod_env);
             register_sdl_builtins(&mod_env);
             register_http_builtins(&mod_env);
             register_json_builtins(&mod_env);

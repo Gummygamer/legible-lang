@@ -153,6 +153,7 @@ fn cmd_fmt(file: &str, write_back: bool) {
 
 fn cmd_repl() {
     use legible_lang::interpreter::builtins::register_builtins;
+    use legible_lang::interpreter::crypto_builtins::register_crypto_builtins;
     use legible_lang::interpreter::db_builtins::register_db_builtins;
     use legible_lang::interpreter::http_builtins::register_http_builtins;
     use legible_lang::interpreter::io_builtins::register_io_builtins;
@@ -163,6 +164,7 @@ fn cmd_repl() {
     eprintln!("Legible REPL v0.1.0 — type expressions to evaluate, Ctrl+D to exit");
     let env = Environment::new();
     register_builtins(&env);
+    register_crypto_builtins(&env);
     register_sdl_builtins(&env);
     register_http_builtins(&env);
     register_json_builtins(&env);
