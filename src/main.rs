@@ -153,6 +153,7 @@ fn cmd_fmt(file: &str, write_back: bool) {
 
 fn cmd_repl() {
     use legible_lang::interpreter::builtins::register_builtins;
+    use legible_lang::interpreter::db_builtins::register_db_builtins;
     use legible_lang::interpreter::http_builtins::register_http_builtins;
     use legible_lang::interpreter::io_builtins::register_io_builtins;
     use legible_lang::interpreter::json_builtins::register_json_builtins;
@@ -166,6 +167,7 @@ fn cmd_repl() {
     register_http_builtins(&env);
     register_json_builtins(&env);
     register_io_builtins(&env);
+    register_db_builtins(&env);
 
     let stdin = std::io::stdin();
     let mut line = String::new();

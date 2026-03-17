@@ -15,6 +15,7 @@ use std::rc::Rc;
 use errors::LegibleError;
 use interpreter::environment::Environment;
 use interpreter::builtins::register_builtins;
+use interpreter::db_builtins::register_db_builtins;
 use interpreter::http_builtins::register_http_builtins;
 use interpreter::io_builtins::register_io_builtins;
 use interpreter::json_builtins::register_json_builtins;
@@ -61,6 +62,7 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
     register_http_builtins(&env);
     register_json_builtins(&env);
     register_io_builtins(&env);
+    register_db_builtins(&env);
 
     // Load modules referenced by `use` declarations
     let base_dir = Path::new(filename)
@@ -137,6 +139,7 @@ fn load_modules(
             register_http_builtins(&mod_env);
             register_json_builtins(&mod_env);
             register_io_builtins(&mod_env);
+            register_db_builtins(&mod_env);
 
             // Recursively load the module's own dependencies
             let mod_base_dir = module_path.parent().unwrap_or(base_dir).to_path_buf();

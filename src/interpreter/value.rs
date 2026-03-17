@@ -29,6 +29,24 @@ pub enum Value {
     Function(Callable),
 }
 
+impl Value {
+    /// Return a human-readable type name for error messages.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Self::Integer(_) => "integer",
+            Self::Decimal(_) => "decimal",
+            Self::Text(_) => "text",
+            Self::Boolean(_) => "boolean",
+            Self::None => "none",
+            Self::List(_) => "list",
+            Self::Mapping(_) => "mapping",
+            Self::Record { .. } => "record",
+            Self::UnionVariant { .. } => "union variant",
+            Self::Function(_) => "function",
+        }
+    }
+}
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
