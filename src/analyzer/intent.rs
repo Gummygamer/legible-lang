@@ -28,6 +28,10 @@ const STOP_WORDS: &[&str] = &[
     // UI / domain meta-words that describe purpose rather than code
     "landing", "registration", "language", "site", "navigation", "footer", "header",
     "banner", "hero", "showcasing", "overview", "listing",
+    // Infrastructure / plumbing meta-words — describe visual/structural intent, not code logic
+    "separator", "divider", "horizontal", "visual", "startup", "interactive", "welcome",
+    // API / service nouns — proper names or categories, not verifiable against code signals
+    "api", "groq", "openai", "repl", "cli",
 ];
 
 /// Generic intent keywords that always match (they're too vague to verify against code signals).
@@ -219,10 +223,12 @@ fn collect_signals(arena: &Arena, node_id: NodeId, signals: &mut BodySignals) {
         NodeKind::ExprStatement { expr } => {
             collect_signals(arena, *expr, signals);
         }
-        NodeKind::LetBinding { value, .. } => {
+        NodeKind::LetBinding { name, value, .. } => {
+            signals.identifiers.push(name.to_lowercase());
             collect_signals(arena, *value, signals);
         }
-        NodeKind::ForLoop { iterable, body, .. } => {
+        NodeKind::ForLoop { binding, iterable, body } => {
+            signals.identifiers.push(binding.to_lowercase());
             collect_signals(arena, *iterable, signals);
             for &s in body {
                 collect_signals(arena, s, signals);
@@ -273,7 +279,8 @@ fn collect_signals(arena: &Arena, node_id: NodeId, signals: &mut BodySignals) {
                 collect_signals(arena, s, signals);
             }
         }
-        NodeKind::SetStatement { value, .. } => {
+        NodeKind::SetStatement { name, value } => {
+            signals.identifiers.push(name.to_lowercase());
             collect_signals(arena, *value, signals);
         }
         _ => {}
