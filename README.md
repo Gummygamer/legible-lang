@@ -2,6 +2,8 @@
 
 A programming language designed to be optimal for LLMs to write, read, and reason about. Legible uses natural-language-style syntax, explicit intent annotations, and a pipeline-first composition model.
 
+**Live site:** https://legible-lang-site.fly.dev
+
 ## Features
 
 - **Natural-language types**: `a list of text`, `a mapping from text to integer`, `an optional User`
