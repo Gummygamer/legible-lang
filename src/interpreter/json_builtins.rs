@@ -22,6 +22,7 @@ pub fn register_json_builtins(env: &Env) {
     let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, LegibleError>)> = vec![
         ("json_parse", builtin_json_parse),
         ("json_encode", builtin_json_encode),
+        ("json_valid", builtin_json_valid),
     ];
 
     for (name, func) in builtins {
@@ -162,4 +163,18 @@ fn builtin_json_encode(args: &[Value]) -> Result<Value, LegibleError> {
     })?;
 
     Ok(Value::Text(text))
+}
+
+/// `json_valid(str: text): boolean`
+fn builtin_json_valid(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 1 {
+        return Err(json_error(
+            "json_valid() expects 1 argument",
+            "Usage: json_valid(json_string)",
+        ));
+    }
+    match &args[0] {
+        Value::Text(s) => Ok(Value::Boolean(serde_json::from_str::<serde_json::Value>(s).is_ok())),
+        _ => Err(json_error("json_valid() expects a text argument", "Pass a JSON string")),
+    }
 }
