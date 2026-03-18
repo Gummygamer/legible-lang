@@ -1,8 +1,10 @@
 /// Process and system built-in functions for the Legible language.
 ///
 /// Provides environment variable access, shell command execution,
-/// command-line argument access, directory operations, and process control.
+/// command-line argument access, directory operations, process control,
+/// and random number generation.
 use std::process::Command;
+use rand_core::{OsRng, RngCore};
 
 use crate::errors::{ErrorCode, LegibleError, Severity, SourceLocation};
 use crate::interpreter::environment::Env;
@@ -31,6 +33,8 @@ pub fn register_process_builtins(env: &Env) {
         ("get_cwd", builtin_get_cwd),
         ("path_join", builtin_path_join),
         ("is_dir", builtin_is_dir),
+        ("random_int", builtin_random_int),
+        ("random_decimal", builtin_random_decimal),
     ];
 
     for (name, func) in builtins {
@@ -201,4 +205,30 @@ fn builtin_is_dir(args: &[Value]) -> Result<Value, LegibleError> {
         _ => return Err(process_error("is_dir() expects a text path", "Pass a path")),
     };
     Ok(Value::Boolean(std::path::Path::new(path).is_dir()))
+}
+
+/// `random_int(max: integer): integer`
+/// Returns a random integer in [1, max] inclusive.
+fn builtin_random_int(args: &[Value]) -> Result<Value, LegibleError> {
+    let max = match args.get(0) {
+        Some(Value::Integer(n)) if *n > 0 => *n as u64,
+        Some(Value::Integer(_)) => {
+            return Err(process_error("random_int() max must be > 0", "Pass a positive integer"))
+        }
+        _ => return Err(process_error(
+            "random_int() expects one positive integer argument",
+            "Usage: random_int(max)",
+        )),
+    };
+    let raw = OsRng.next_u64();
+    let result = (raw % max) as i64 + 1;
+    Ok(Value::Integer(result))
+}
+
+/// `random_decimal(): decimal`
+/// Returns a random decimal in [0.0, 1.0).
+fn builtin_random_decimal(_args: &[Value]) -> Result<Value, LegibleError> {
+    let raw = OsRng.next_u64();
+    let result = (raw as f64) / (u64::MAX as f64);
+    Ok(Value::Decimal(result))
 }
