@@ -41,7 +41,7 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
     let arena = parser_inst.arena;
 
     // Run static analysis
-    let contract_errors = analyzer::contracts::check_contracts(&arena, root);
+    let contract_errors = analyzer::contracts::check_contracts(&arena, root, source);
     for err in &contract_errors {
         err.emit_json();
     }
@@ -100,7 +100,7 @@ pub fn run_source_streaming(
     let arena = parser_inst.arena;
 
     // Run static analysis
-    let contract_errors = analyzer::contracts::check_contracts(&arena, root);
+    let contract_errors = analyzer::contracts::check_contracts(&arena, root, source);
     for err in &contract_errors {
         err.emit_json();
     }

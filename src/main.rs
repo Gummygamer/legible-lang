@@ -93,7 +93,7 @@ fn cmd_check(file: &str) {
     let arena = &parser.arena;
 
     let type_errors = legible_lang::analyzer::typechecker::typecheck(arena, root);
-    let contract_errors = legible_lang::analyzer::contracts::check_contracts(arena, root);
+    let contract_errors = legible_lang::analyzer::contracts::check_contracts(arena, root, &source);
     let intent_warnings = legible_lang::analyzer::intent::verify_intents(arena, root);
 
     let mut has_errors = false;
