@@ -35,6 +35,7 @@ pub fn register_process_builtins(env: &Env) {
         ("is_dir", builtin_is_dir),
         ("random_int", builtin_random_int),
         ("random_decimal", builtin_random_decimal),
+        ("skip", builtin_skip),
     ];
 
     for (name, func) in builtins {
@@ -231,4 +232,10 @@ fn builtin_random_decimal(_args: &[Value]) -> Result<Value, LegibleError> {
     let raw = OsRng.next_u64();
     let result = (raw as f64) / (u64::MAX as f64);
     Ok(Value::Decimal(result))
+}
+
+/// `skip(): nothing`
+/// No-op placeholder for empty if-branches.
+fn builtin_skip(_args: &[Value]) -> Result<Value, LegibleError> {
+    Ok(Value::None)
 }
