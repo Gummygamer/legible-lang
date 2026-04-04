@@ -26,6 +26,10 @@ struct SdlState {
     event_pump: EventPump,
     timer: TimerSubsystem,
     pressed_keys: HashSet<String>,
+    /// Path to the currently loaded font file.
+    font_path: Option<String>,
+    /// Point size of the currently loaded font.
+    font_size: u16,
 }
 
 thread_local! {
@@ -55,6 +59,8 @@ pub fn register_sdl_builtins(env: &Env) {
         ("sdl_delay", builtin_sdl_delay),
         ("sdl_get_ticks", builtin_sdl_get_ticks),
         ("sdl_quit", builtin_sdl_quit),
+        ("sdl_load_font", builtin_sdl_load_font),
+        ("sdl_draw_text", builtin_sdl_draw_text),
     ];
 
     for (name, func) in builtins {
@@ -151,6 +157,8 @@ fn builtin_sdl_init(args: &[Value]) -> Result<Value, LegibleError> {
             event_pump,
             timer,
             pressed_keys: HashSet::new(),
+            font_path: None,
+            font_size: 16,
         });
     });
 
@@ -278,4 +286,87 @@ fn builtin_sdl_quit(_args: &[Value]) -> Result<Value, LegibleError> {
         *state.borrow_mut() = None;
     });
     Ok(Value::None)
+}
+
+/// `sdl_load_font(path: text, size: integer): nothing`
+///
+/// Stores the font path and size for subsequent `sdl_draw_text` calls.
+/// The font file is loaded from disk on each draw call.
+fn builtin_sdl_load_font(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 2 {
+        return Err(sdl_error(
+            "sdl_load_font() expects 2 arguments",
+            "Usage: sdl_load_font(path, size) — e.g. sdl_load_font(\"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf\", 24)",
+        ));
+    }
+    let path = require_text(&args[0], "path")?;
+    let size = require_integer(&args[1], "size")?;
+    if size < 1 || size > 512 {
+        return Err(sdl_error(
+            "Font size must be between 1 and 512",
+            "Use a reasonable point size such as 16 or 24",
+        ));
+    }
+    with_sdl(|sdl| {
+        sdl.font_path = Some(path);
+        sdl.font_size = size as u16;
+        Ok(Value::None)
+    })
+}
+
+/// `sdl_draw_text(text: text, x: integer, y: integer, r: integer, g: integer, b: integer): nothing`
+///
+/// Renders `text` at pixel position `(x, y)` using the font loaded by `sdl_load_font`.
+/// Color is specified as RGB integers 0–255.
+fn builtin_sdl_draw_text(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 6 {
+        return Err(sdl_error(
+            "sdl_draw_text() expects 6 arguments",
+            "Usage: sdl_draw_text(text, x, y, r, g, b)",
+        ));
+    }
+    let text = require_text(&args[0], "text")?;
+    let x = require_integer(&args[1], "x")? as i32;
+    let y = require_integer(&args[2], "y")? as i32;
+    let r = require_integer(&args[3], "r")? as u8;
+    let g = require_integer(&args[4], "g")? as u8;
+    let b = require_integer(&args[5], "b")? as u8;
+
+    with_sdl(|sdl| {
+        let (font_path, font_size) = match &sdl.font_path {
+            Some(p) => (p.clone(), sdl.font_size),
+            None => {
+                return Err(sdl_error(
+                    "No font loaded",
+                    "Call sdl_load_font(path, size) before sdl_draw_text",
+                ));
+            }
+        };
+
+        let ttf_context = sdl2::ttf::init()
+            .map_err(|e| sdl_error(&format!("TTF init failed: {e}"), "Check SDL2_ttf installation"))?;
+
+        let font = ttf_context
+            .load_font(&font_path, font_size)
+            .map_err(|e| sdl_error(&format!("Font load failed: {e}"), "Check that the font path exists and is a valid TTF/OTF file"))?;
+
+        let surface = font
+            .render(&text)
+            .blended(sdl2::pixels::Color::RGB(r, g, b))
+            .map_err(|e| sdl_error(&format!("Text render failed: {e}"), "Check font and text parameters"))?;
+
+        let texture_creator = sdl.canvas.texture_creator();
+        let texture = texture_creator
+            .create_texture_from_surface(&surface)
+            .map_err(|e| sdl_error(&format!("Texture creation failed: {e}"), "Check available GPU memory"))?;
+
+        let sdl2::render::TextureQuery { width, height, .. } = texture.query();
+        let dst = sdl2::rect::Rect::new(x, y, width, height);
+
+        sdl.canvas
+            .copy(&texture, None, dst)
+            .map_err(|e| sdl_error(&format!("Canvas copy failed: {e}"), "Check canvas state"))?;
+
+        Ok(Value::None)
+    })
 }
