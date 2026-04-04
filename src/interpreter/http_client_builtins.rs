@@ -2,9 +2,18 @@
 ///
 /// Provides synchronous HTTP client operations using `ureq` for making
 /// outbound HTTP requests (GET, POST with JSON, etc.).
+use std::time::Duration;
+
 use crate::errors::{ErrorCode, LegibleError, Severity, SourceLocation};
 use crate::interpreter::environment::Env;
 use crate::interpreter::value::{Callable, Value};
+
+fn http_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_read(Duration::from_secs(600))
+        .timeout_write(Duration::from_secs(10))
+        .build()
+}
 
 fn client_error(message: &str, suggestion: &str) -> LegibleError {
     LegibleError {
@@ -60,7 +69,8 @@ fn builtin_http_client_get(args: &[Value]) -> Result<Value, LegibleError> {
         )),
     };
 
-    let mut request = ureq::get(&url);
+    let agent = http_agent();
+    let mut request = agent.get(&url);
     for (k, v) in &header_map {
         if let (Value::Text(key), Value::Text(val)) = (k, v) {
             request = request.set(key, val);
@@ -122,7 +132,8 @@ fn builtin_http_client_post(args: &[Value]) -> Result<Value, LegibleError> {
         )),
     };
 
-    let mut request = ureq::post(&url);
+    let agent = http_agent();
+    let mut request = agent.post(&url);
     for (k, v) in &header_map {
         if let (Value::Text(key), Value::Text(val)) = (k, v) {
             request = request.set(key, val);
