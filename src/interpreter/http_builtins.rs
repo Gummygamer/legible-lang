@@ -42,6 +42,7 @@ pub fn register_http_builtins(env: &Env) {
             builtin_http_respond_with_headers,
         ),
         ("http_stop", builtin_http_stop),
+        ("http_respond_file", builtin_http_respond_file),
     ];
 
     for (name, func) in builtins {
@@ -272,6 +273,57 @@ fn builtin_http_respond_with_headers(args: &[Value]) -> Result<Value, LegibleErr
                 &format!("Failed to send response: {e}"),
                 "Check connection state",
             )
+        })?;
+
+        Ok(Value::None)
+    })
+}
+
+/// `http_respond_file(status: integer, content_type: text, path: text): nothing`
+///
+/// Read a file from disk as raw bytes and send it as the HTTP response body.
+/// Useful for serving binary files like images without UTF-8 re-encoding.
+fn builtin_http_respond_file(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 3 {
+        return Err(http_error(
+            "http_respond_file() expects 3 arguments",
+            "Usage: http_respond_file(status, content_type, path)",
+        ));
+    }
+    let status = match &args[0] {
+        Value::Integer(n) => *n as u16,
+        _ => return Err(http_error("Expected integer status", "Pass an integer like 200")),
+    };
+    let content_type = match &args[1] {
+        Value::Text(s) => s.clone(),
+        _ => return Err(http_error("Expected text content_type", "Pass a MIME type string")),
+    };
+    let path = match &args[2] {
+        Value::Text(s) => s.clone(),
+        _ => return Err(http_error("Expected text path", "Pass a file path string")),
+    };
+
+    let bytes = std::fs::read(&path).map_err(|e| {
+        http_error(
+            &format!("Failed to read file '{path}': {e}"),
+            "Check the file path exists and is readable",
+        )
+    })?;
+
+    with_http(|http| {
+        let request = http.current_request.take().ok_or_else(|| {
+            http_error("No current request to respond to", "Call http_next_request() first")
+        })?;
+
+        let ct_header = Header::from_bytes(b"Content-Type", content_type.as_bytes())
+            .map_err(|_| http_error("Invalid Content-Type header", "Use a valid MIME type"))?;
+
+        let response = Response::from_data(bytes)
+            .with_status_code(StatusCode(status))
+            .with_header(ct_header);
+
+        request.respond(response).map_err(|e| {
+            http_error(&format!("Failed to send file response: {e}"), "Check connection state")
         })?;
 
         Ok(Value::None)
