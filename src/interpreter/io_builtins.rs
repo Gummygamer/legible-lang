@@ -28,6 +28,8 @@ pub fn register_io_builtins(env: &Env) {
         ("log", builtin_log),
         ("url_decode", builtin_url_decode),
         ("random_hex", builtin_random_hex),
+        ("read_stdin", builtin_read_stdin),
+        ("write_stdout", builtin_write_stdout),
     ];
 
     for (name, func) in builtins {
@@ -266,4 +268,88 @@ fn builtin_random_hex(args: &[Value]) -> Result<Value, LegibleError> {
         .collect::<String>();
 
     Ok(Value::Text(hex[..length].to_string()))
+}
+
+/// `read_stdin(n: integer): text`
+///
+/// Read exactly `n` bytes from standard input and return them as text.
+/// Used for protocols like MCP/JSON-RPC that use Content-Length framing.
+fn builtin_read_stdin(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 1 {
+        return Err(io_error(
+            "read_stdin() expects 1 argument",
+            "Usage: read_stdin(byte_count)",
+        ));
+    }
+    let n = match &args[0] {
+        Value::Integer(n) if *n >= 0 => *n as usize,
+        Value::Integer(_) => {
+            return Err(io_error(
+                "read_stdin() expects a non-negative integer",
+                "Pass the number of bytes to read",
+            ))
+        }
+        _ => {
+            return Err(io_error(
+                "read_stdin() expects an integer",
+                "Pass an integer byte count",
+            ))
+        }
+    };
+
+    use std::io::Read;
+    let mut buf = vec![0u8; n];
+    std::io::stdin()
+        .lock()
+        .read_exact(&mut buf)
+        .map_err(|e| {
+            io_error(
+                &format!("Failed to read {n} bytes from stdin: {e}"),
+                "Check that stdin has enough data available",
+            )
+        })?;
+
+    let text = String::from_utf8(buf)
+        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned());
+    Ok(Value::Text(text))
+}
+
+/// `write_stdout(content: text): nothing`
+///
+/// Write text to standard output without a trailing newline.
+/// Used for protocols like MCP/JSON-RPC that need exact byte output.
+fn builtin_write_stdout(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 1 {
+        return Err(io_error(
+            "write_stdout() expects 1 argument",
+            "Usage: write_stdout(content)",
+        ));
+    }
+    let content = match &args[0] {
+        Value::Text(s) => s,
+        _ => {
+            return Err(io_error(
+                "write_stdout() expects text",
+                "Pass a text string to write",
+            ))
+        }
+    };
+
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    handle.write_all(content.as_bytes()).map_err(|e| {
+        io_error(
+            &format!("Failed to write to stdout: {e}"),
+            "Check stdout availability",
+        )
+    })?;
+    handle.flush().map_err(|e| {
+        io_error(
+            &format!("Failed to flush stdout: {e}"),
+            "Check stdout availability",
+        )
+    })?;
+
+    Ok(Value::None)
 }
