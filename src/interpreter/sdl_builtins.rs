@@ -61,6 +61,7 @@ pub fn register_sdl_builtins(env: &Env) {
         ("sdl_quit", builtin_sdl_quit),
         ("sdl_load_font", builtin_sdl_load_font),
         ("sdl_draw_text", builtin_sdl_draw_text),
+        ("sdl_screenshot", builtin_sdl_screenshot),
     ];
 
     for (name, func) in builtins {
@@ -368,5 +369,46 @@ fn builtin_sdl_draw_text(args: &[Value]) -> Result<Value, LegibleError> {
             .map_err(|e| sdl_error(&format!("Canvas copy failed: {e}"), "Check canvas state"))?;
 
         Ok(Value::None)
+    })
+}
+
+/// `sdl_screenshot(path: text): text`
+///
+/// Captures the current SDL canvas as a PNG file at `path` and returns the path.
+/// Call this before `sdl_quit()` or at any point while the canvas is active.
+fn builtin_sdl_screenshot(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 1 {
+        return Err(sdl_error(
+            "sdl_screenshot() expects 1 argument",
+            "Usage: sdl_screenshot(path) — e.g. sdl_screenshot(\"/tmp/result.png\")",
+        ));
+    }
+    let path = require_text(&args[0], "path")?;
+
+    with_sdl(|sdl| {
+        let (width, height) = sdl
+            .canvas
+            .output_size()
+            .map_err(|e| sdl_error(&format!("Failed to get canvas size: {e}"), "Ensure the SDL2 canvas is initialised"))?;
+
+        let pixels = sdl
+            .canvas
+            .read_pixels(None, sdl2::pixels::PixelFormatEnum::RGB24)
+            .map_err(|e| sdl_error(&format!("Failed to read canvas pixels: {e}"), "Ensure the canvas is active and has been rendered"))?;
+
+        let file = std::fs::File::create(&path)
+            .map_err(|e| sdl_error(&format!("Cannot create screenshot file {path}: {e}"), "Check the path and directory permissions"))?;
+        let mut buf_writer = std::io::BufWriter::new(file);
+        let mut encoder = png::Encoder::new(&mut buf_writer, width, height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder
+            .write_header()
+            .map_err(|e| sdl_error(&format!("PNG header write failed: {e}"), ""))?;
+        writer
+            .write_image_data(&pixels)
+            .map_err(|e| sdl_error(&format!("PNG pixel write failed: {e}"), ""))?;
+
+        Ok(Value::Text(path))
     })
 }
