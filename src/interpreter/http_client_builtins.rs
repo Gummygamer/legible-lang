@@ -11,7 +11,7 @@ use crate::interpreter::value::{Callable, Value};
 fn http_agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_read(Duration::from_secs(600))
-        .timeout_write(Duration::from_secs(10))
+        .timeout_write(Duration::from_secs(120))
         .build()
 }
 
