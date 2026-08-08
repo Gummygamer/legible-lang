@@ -72,6 +72,11 @@ fn test_bytes_and_bits() {
 }
 
 #[test]
+fn test_list_ops() {
+    run_fixture("list_ops");
+}
+
+#[test]
 fn test_read_file_bytes_round_trip() {
     let path = std::env::temp_dir().join(format!(
         "legible-bytes-test-{}-{}.bin",

@@ -23,6 +23,7 @@ use interpreter::http_builtins::register_http_builtins;
 use interpreter::http_client_builtins::register_http_client_builtins;
 use interpreter::io_builtins::register_io_builtins;
 use interpreter::json_builtins::register_json_builtins;
+use interpreter::list_builtins::register_list_builtins;
 use interpreter::process_builtins::register_process_builtins;
 use interpreter::sdl_builtins::register_sdl_builtins;
 use interpreter::value::Value;
@@ -38,6 +39,7 @@ type Env = Rc<RefCell<Environment>>;
 fn register_all_builtins(env: &Env) {
     register_builtins(env);
     register_bytes_builtins(env);
+    register_list_builtins(env);
     register_crypto_builtins(env);
     register_sdl_builtins(env);
     register_http_builtins(env);
