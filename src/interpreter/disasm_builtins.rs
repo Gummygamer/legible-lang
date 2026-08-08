@@ -86,28 +86,154 @@ fn disasm_arguments(args: &[Value], name: &str) -> Result<(i64, usize, usize, u6
     Ok((handle, offset, length, address as u64))
 }
 
-fn decoded_value(instructions: capstone::Instructions<'_>) -> Value {
-    Value::List(
-        instructions
-            .iter()
-            .map(|instruction| {
-                Value::Mapping(vec![
-                    (
-                        Value::Text("address".to_string()),
-                        Value::Integer(instruction.address() as i64),
-                    ),
-                    (
-                        Value::Text("mnemonic".to_string()),
-                        Value::Text(instruction.mnemonic().unwrap_or("").to_string()),
-                    ),
-                    (
-                        Value::Text("op_str".to_string()),
-                        Value::Text(instruction.op_str().unwrap_or("").to_string()),
-                    ),
-                ])
+fn operand_value(
+    operand_type: &str,
+    reg: String,
+    imm: i64,
+    mem_base: String,
+    mem_index: String,
+    mem_disp: i64,
+) -> Value {
+    Value::Mapping(vec![
+        (Value::Text("type".to_string()), Value::Text(operand_type.to_string())),
+        (Value::Text("reg".to_string()), Value::Text(reg)),
+        (Value::Text("imm".to_string()), Value::Integer(imm)),
+        (Value::Text("mem_base".to_string()), Value::Text(mem_base)),
+        (Value::Text("mem_index".to_string()), Value::Text(mem_index)),
+        (Value::Text("mem_disp".to_string()), Value::Integer(mem_disp)),
+    ])
+}
+
+fn register_name(capstone: &Capstone, register: RegId) -> String {
+    capstone.reg_name(register).unwrap_or_default()
+}
+
+fn decoded_arm64_value(
+    capstone: &Capstone,
+    instructions: capstone::Instructions<'_>,
+) -> Result<Value, LegibleError> {
+    let mut decoded = Vec::new();
+    for instruction in instructions.iter() {
+        let detail = capstone.insn_detail(instruction).map_err(|error| {
+            disasm_error(
+                &format!("Failed to read ARM64 instruction detail: {error}"),
+                "Use a valid byte buffer",
+            )
+        })?;
+        let operands = detail
+            .arch_detail()
+            .arm64()
+            .expect("ARM64 disassembler returned non-ARM64 detail")
+            .operands()
+            .map(|operand| match operand.op_type {
+                arch::arm64::Arm64OperandType::Reg(register) => operand_value(
+                    "reg",
+                    register_name(capstone, register),
+                    0,
+                    String::new(),
+                    String::new(),
+                    0,
+                ),
+                arch::arm64::Arm64OperandType::Imm(value) => operand_value(
+                    "imm",
+                    String::new(),
+                    value,
+                    String::new(),
+                    String::new(),
+                    0,
+                ),
+                arch::arm64::Arm64OperandType::Mem(memory) => operand_value(
+                    "mem",
+                    String::new(),
+                    0,
+                    register_name(capstone, memory.base()),
+                    register_name(capstone, memory.index()),
+                    memory.disp() as i64,
+                ),
+                _ => operand_value("other", String::new(), 0, String::new(), String::new(), 0),
             })
-            .collect(),
-    )
+            .collect();
+        decoded.push(Value::Mapping(vec![
+            (
+                Value::Text("address".to_string()),
+                Value::Integer(instruction.address() as i64),
+            ),
+            (
+                Value::Text("mnemonic".to_string()),
+                Value::Text(instruction.mnemonic().unwrap_or("").to_string()),
+            ),
+            (
+                Value::Text("op_str".to_string()),
+                Value::Text(instruction.op_str().unwrap_or("").to_string()),
+            ),
+            (Value::Text("operands".to_string()), Value::List(operands)),
+        ]));
+    }
+    Ok(Value::List(decoded))
+}
+
+fn decoded_arm32_value(
+    capstone: &Capstone,
+    instructions: capstone::Instructions<'_>,
+) -> Result<Value, LegibleError> {
+    let mut decoded = Vec::new();
+    for instruction in instructions.iter() {
+        let detail = capstone.insn_detail(instruction).map_err(|error| {
+            disasm_error(
+                &format!("Failed to read ARM32 instruction detail: {error}"),
+                "Use a valid byte buffer",
+            )
+        })?;
+        let operands = detail
+            .arch_detail()
+            .arm()
+            .expect("ARM32 disassembler returned non-ARM detail")
+            .operands()
+            .map(|operand| match operand.op_type {
+                arch::arm::ArmOperandType::Reg(register) => operand_value(
+                    "reg",
+                    register_name(capstone, register),
+                    0,
+                    String::new(),
+                    String::new(),
+                    0,
+                ),
+                arch::arm::ArmOperandType::Imm(value) => operand_value(
+                    "imm",
+                    String::new(),
+                    value as i64,
+                    String::new(),
+                    String::new(),
+                    0,
+                ),
+                arch::arm::ArmOperandType::Mem(memory) => operand_value(
+                    "mem",
+                    String::new(),
+                    0,
+                    register_name(capstone, memory.base()),
+                    register_name(capstone, memory.index()),
+                    memory.disp() as i64,
+                ),
+                _ => operand_value("other", String::new(), 0, String::new(), String::new(), 0),
+            })
+            .collect();
+        decoded.push(Value::Mapping(vec![
+            (
+                Value::Text("address".to_string()),
+                Value::Integer(instruction.address() as i64),
+            ),
+            (
+                Value::Text("mnemonic".to_string()),
+                Value::Text(instruction.mnemonic().unwrap_or("").to_string()),
+            ),
+            (
+                Value::Text("op_str".to_string()),
+                Value::Text(instruction.op_str().unwrap_or("").to_string()),
+            ),
+            (Value::Text("operands".to_string()), Value::List(operands)),
+        ]));
+    }
+    Ok(Value::List(decoded))
 }
 
 /// `disasm_arm64(handle, offset, length, address): a list of mappings`
@@ -121,6 +247,7 @@ fn builtin_disasm_arm64(args: &[Value]) -> Result<Value, LegibleError> {
             .arm64()
             .mode(arch::arm64::ArchMode::Arm)
             .endian(capstone::Endian::Little)
+            .detail(true)
             .build()
             .map_err(|error| {
                 disasm_error(
@@ -134,7 +261,7 @@ fn builtin_disasm_arm64(args: &[Value]) -> Result<Value, LegibleError> {
                 "Use a valid byte buffer",
             )
         })?;
-        Ok(decoded_value(instructions))
+        decoded_arm64_value(&capstone, instructions)
     })
 }
 
@@ -148,6 +275,7 @@ fn builtin_disasm_arm32(args: &[Value]) -> Result<Value, LegibleError> {
         let capstone = Capstone::new()
             .arm()
             .mode(arch::arm::ArchMode::Arm)
+            .detail(true)
             .build()
             .map_err(|error| {
                 disasm_error(
@@ -161,6 +289,6 @@ fn builtin_disasm_arm32(args: &[Value]) -> Result<Value, LegibleError> {
                 "Use a valid byte buffer",
             )
         })?;
-        Ok(decoded_value(instructions))
+        decoded_arm32_value(&capstone, instructions)
     })
 }
