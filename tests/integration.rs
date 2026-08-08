@@ -72,6 +72,11 @@ fn test_bytes_and_bits() {
 }
 
 #[test]
+fn test_disasm_and_bytes() {
+    run_fixture("disasm_and_bytes");
+}
+
+#[test]
 fn test_list_ops() {
     run_fixture("list_ops");
 }

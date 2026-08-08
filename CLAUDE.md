@@ -84,6 +84,7 @@ Keep dependencies minimal. Approved crates:
 | `tiny_http`  | Synchronous HTTP server for web builtins  |
 | `sdl2`       | SDL2 bindings for graphics/input builtins |
 | `rusqlite`   | SQLite bindings for database builtins     |
+| `capstone`   | Disassembler bindings for disassembly builtins |
 | `criterion`  | Benchmarking (dev-dependency)             |
 
 Do **not** add runtime dependencies beyond these without justification. No async runtime. No allocator crates. Keep the binary lean.
@@ -111,6 +112,7 @@ miette = { version = "7", features = ["fancy"] }
 sdl2 = "0.37"
 tiny_http = "0.12"
 rusqlite = { version = "0.39", features = ["bundled"] }
+capstone = "0.13"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

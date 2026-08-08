@@ -30,12 +30,20 @@ fn bytes_error(message: &str, suggestion: &str) -> LegibleError {
 pub fn register_bytes_builtins(env: &Env) {
     let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, LegibleError>)> = vec![
         ("read_file_bytes", builtin_read_file_bytes),
+        ("bytes_new", builtin_bytes_new),
+        ("bytes_from_hex", builtin_bytes_from_hex),
         ("bytes_from_text", builtin_bytes_from_text),
+        ("bytes_concat", builtin_bytes_concat),
         ("bytes_length", builtin_bytes_length),
         ("bytes_get", builtin_bytes_get),
         ("bytes_slice", builtin_bytes_slice),
         ("bytes_to_text", builtin_bytes_to_text),
         ("bytes_read_u32_le", builtin_bytes_read_u32_le),
+        ("bytes_read_u16_le", builtin_bytes_read_u16_le),
+        ("bytes_set", builtin_bytes_set),
+        ("bytes_fill", builtin_bytes_fill),
+        ("bytes_write_bytes", builtin_bytes_write_bytes),
+        ("bytes_write_u32_le", builtin_bytes_write_u32_le),
         ("bytes_index_of", builtin_bytes_index_of),
         ("bytes_scan_words", builtin_bytes_scan_words),
         ("write_file_bytes", builtin_write_file_bytes),
@@ -121,7 +129,7 @@ fn handle_index(handle: i64) -> Result<usize, LegibleError> {
     })
 }
 
-fn with_buffer<T>(
+pub(crate) fn with_buffer<T>(
     handle: i64,
     action: impl FnOnce(&[u8]) -> Result<T, LegibleError>,
 ) -> Result<T, LegibleError> {
@@ -135,6 +143,29 @@ fn with_buffer<T>(
     let buffer = registry
         .get(index)
         .and_then(Option::as_deref)
+        .ok_or_else(|| {
+            bytes_error(
+                "Unknown or freed byte buffer handle",
+                "Use a live handle returned by a bytes builtin",
+            )
+        })?;
+    action(buffer)
+}
+
+fn with_buffer_mut<T>(
+    handle: i64,
+    action: impl FnOnce(&mut Vec<u8>) -> Result<T, LegibleError>,
+) -> Result<T, LegibleError> {
+    let index = handle_index(handle)?;
+    let mut registry = buffers().lock().map_err(|_| {
+        bytes_error(
+            "Byte buffer registry is unavailable",
+            "Try again in a new process",
+        )
+    })?;
+    let buffer = registry
+        .get_mut(index)
+        .and_then(Option::as_mut)
         .ok_or_else(|| {
             bytes_error(
                 "Unknown or freed byte buffer handle",
@@ -167,12 +198,74 @@ fn builtin_read_file_bytes(args: &[Value]) -> Result<Value, LegibleError> {
     store_buffer(content)
 }
 
+/// `bytes_new(length: integer): integer`
+fn builtin_bytes_new(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_new", 1)?;
+    let length = nonnegative_index(expect_integer(args, 0, "bytes_new")?, "bytes_new")?;
+    store_buffer(vec![0; length])
+}
+
+/// `bytes_from_hex(content: text): integer`
+fn builtin_bytes_from_hex(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_from_hex", 1)?;
+    let text = expect_text(args, 0, "bytes_from_hex")?;
+    let digits: Vec<u8> = text
+        .bytes()
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .collect();
+    if digits.len() % 2 != 0 {
+        return Err(bytes_error(
+            "bytes_from_hex() requires an even number of hex digits",
+            "Pass pairs of hexadecimal digits",
+        ));
+    }
+    let mut buffer = Vec::with_capacity(digits.len() / 2);
+    for pair in digits.chunks_exact(2) {
+        let high = hex_digit(pair[0]).ok_or_else(|| {
+            bytes_error(
+                "bytes_from_hex() received a non-hex character",
+                "Pass only hexadecimal digits and whitespace",
+            )
+        })?;
+        let low = hex_digit(pair[1]).ok_or_else(|| {
+            bytes_error(
+                "bytes_from_hex() received a non-hex character",
+                "Pass only hexadecimal digits and whitespace",
+            )
+        })?;
+        buffer.push((high << 4) | low);
+    }
+    store_buffer(buffer)
+}
+
+fn hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
 /// `bytes_from_text(content: text): integer`
 fn builtin_bytes_from_text(args: &[Value]) -> Result<Value, LegibleError> {
     require_arity(args, "bytes_from_text", 1)?;
     Ok(store_buffer(
         expect_text(args, 0, "bytes_from_text")?.as_bytes().to_vec(),
     )?)
+}
+
+/// `bytes_concat(a: integer, b: integer): integer`
+fn builtin_bytes_concat(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_concat", 2)?;
+    let first = expect_integer(args, 0, "bytes_concat")?;
+    let second = expect_integer(args, 1, "bytes_concat")?;
+    let mut combined = with_buffer(first, |buffer| Ok(buffer.to_vec()))?;
+    with_buffer(second, |buffer| {
+        combined.extend_from_slice(buffer);
+        Ok(())
+    })?;
+    store_buffer(combined)
 }
 
 /// `bytes_length(handle: integer): integer`
@@ -256,6 +349,145 @@ fn builtin_bytes_read_u32_le(args: &[Value]) -> Result<Value, LegibleError> {
         Ok(Value::Integer(
             u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as i64,
         ))
+    })
+}
+
+/// `bytes_read_u16_le(handle: integer, offset: integer): integer`
+fn builtin_bytes_read_u16_le(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_read_u16_le", 2)?;
+    let handle = expect_integer(args, 0, "bytes_read_u16_le")?;
+    let offset = nonnegative_index(
+        expect_integer(args, 1, "bytes_read_u16_le")?,
+        "bytes_read_u16_le",
+    )?;
+    with_buffer(handle, |buffer| {
+        let end = offset.checked_add(2).ok_or_else(|| {
+            bytes_error(
+                "bytes_read_u16_le() range is out of bounds",
+                "Ensure offset + 2 is within the buffer",
+            )
+        })?;
+        let bytes = buffer.get(offset..end).ok_or_else(|| {
+            bytes_error(
+                "bytes_read_u16_le() range is out of bounds",
+                "Ensure offset + 2 is within the buffer",
+            )
+        })?;
+        Ok(Value::Integer(
+            u16::from_le_bytes([bytes[0], bytes[1]]) as i64
+        ))
+    })
+}
+
+fn byte_value(value: i64, name: &str) -> Result<u8, LegibleError> {
+    u8::try_from(value).map_err(|_| {
+        bytes_error(
+            &format!("{name}() value must be between 0 and 255"),
+            "Pass a byte value in the range 0 through 255",
+        )
+    })
+}
+
+/// `bytes_set(handle: integer, index: integer, value: integer): boolean`
+fn builtin_bytes_set(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_set", 3)?;
+    let handle = expect_integer(args, 0, "bytes_set")?;
+    let index = nonnegative_index(expect_integer(args, 1, "bytes_set")?, "bytes_set")?;
+    let value = byte_value(expect_integer(args, 2, "bytes_set")?, "bytes_set")?;
+    with_buffer_mut(handle, |buffer| {
+        let target = buffer.get_mut(index).ok_or_else(|| {
+            bytes_error(
+                "bytes_set() index is out of bounds",
+                "Use an index smaller than bytes_length(handle)",
+            )
+        })?;
+        *target = value;
+        Ok(Value::Boolean(true))
+    })
+}
+
+/// `bytes_fill(handle: integer, offset: integer, length: integer, value: integer): boolean`
+fn builtin_bytes_fill(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_fill", 4)?;
+    let handle = expect_integer(args, 0, "bytes_fill")?;
+    let offset = nonnegative_index(expect_integer(args, 1, "bytes_fill")?, "bytes_fill")?;
+    let length = nonnegative_index(expect_integer(args, 2, "bytes_fill")?, "bytes_fill")?;
+    let value = byte_value(expect_integer(args, 3, "bytes_fill")?, "bytes_fill")?;
+    with_buffer_mut(handle, |buffer| {
+        let end = offset.checked_add(length).ok_or_else(|| {
+            bytes_error(
+                "bytes_fill() range is out of bounds",
+                "Ensure offset + length is within the buffer",
+            )
+        })?;
+        let target = buffer.get_mut(offset..end).ok_or_else(|| {
+            bytes_error(
+                "bytes_fill() range is out of bounds",
+                "Ensure offset + length is within the buffer",
+            )
+        })?;
+        target.fill(value);
+        Ok(Value::Boolean(true))
+    })
+}
+
+/// `bytes_write_bytes(dest: integer, offset: integer, src: integer): integer`
+fn builtin_bytes_write_bytes(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_write_bytes", 3)?;
+    let destination = expect_integer(args, 0, "bytes_write_bytes")?;
+    let offset = nonnegative_index(
+        expect_integer(args, 1, "bytes_write_bytes")?,
+        "bytes_write_bytes",
+    )?;
+    let source = expect_integer(args, 2, "bytes_write_bytes")?;
+    let source_bytes = with_buffer(source, |buffer| Ok(buffer.to_vec()))?;
+    with_buffer_mut(destination, |buffer| {
+        let end = offset.checked_add(source_bytes.len()).ok_or_else(|| {
+            bytes_error(
+                "bytes_write_bytes() range is out of bounds",
+                "Ensure the source fits within the destination buffer",
+            )
+        })?;
+        let target = buffer.get_mut(offset..end).ok_or_else(|| {
+            bytes_error(
+                "bytes_write_bytes() range is out of bounds",
+                "Ensure the source fits within the destination buffer",
+            )
+        })?;
+        target.copy_from_slice(&source_bytes);
+        Ok(Value::Integer(source_bytes.len() as i64))
+    })
+}
+
+/// `bytes_write_u32_le(handle: integer, offset: integer, value: integer): boolean`
+fn builtin_bytes_write_u32_le(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_write_u32_le", 3)?;
+    let handle = expect_integer(args, 0, "bytes_write_u32_le")?;
+    let offset = nonnegative_index(
+        expect_integer(args, 1, "bytes_write_u32_le")?,
+        "bytes_write_u32_le",
+    )?;
+    let value = u32::try_from(expect_integer(args, 2, "bytes_write_u32_le")?).map_err(|_| {
+        bytes_error(
+            "bytes_write_u32_le() value must be between 0 and 4294967295",
+            "Pass an unsigned 32-bit integer",
+        )
+    })?;
+    with_buffer_mut(handle, |buffer| {
+        let end = offset.checked_add(4).ok_or_else(|| {
+            bytes_error(
+                "bytes_write_u32_le() range is out of bounds",
+                "Ensure offset + 4 is within the buffer",
+            )
+        })?;
+        let target = buffer.get_mut(offset..end).ok_or_else(|| {
+            bytes_error(
+                "bytes_write_u32_le() range is out of bounds",
+                "Ensure offset + 4 is within the buffer",
+            )
+        })?;
+        target.copy_from_slice(&value.to_le_bytes());
+        Ok(Value::Boolean(true))
     })
 }
 

@@ -5,6 +5,7 @@ pub mod builtins;
 pub mod bytes_builtins;
 pub mod crypto_builtins;
 pub mod db_builtins;
+pub mod disasm_builtins;
 pub mod environment;
 pub mod evaluator;
 pub mod http_builtins;

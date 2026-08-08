@@ -18,6 +18,7 @@ png = "0.17"
 tiny_http = "0.12"
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 argon2 = "0.5"
+capstone = "0.13"
 rand_core = { version = "0.6", features = ["getrandom"] }
 ureq = "2"
 
