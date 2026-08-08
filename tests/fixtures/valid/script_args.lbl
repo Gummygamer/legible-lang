@@ -1,0 +1,8 @@
+function main(): nothing
+  intent: return result
+  let arguments: a list of text = get_args()
+  print("count=" ++ to_text(length(arguments)))
+  for a in arguments do
+    print("arg=" ++ a)
+  end
+end

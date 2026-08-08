@@ -87,3 +87,36 @@ fn test_formatter_idempotency() {
         );
     }
 }
+
+// --- Command-line script arguments ---
+
+#[test]
+fn test_run_forwards_script_arguments() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_legible"))
+        .args([
+            "run",
+            "tests/fixtures/valid/script_args.lbl",
+            "alpha",
+            "beta",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("count=3"));
+    assert!(stdout.contains("arg=alpha"));
+    assert!(stdout.contains("arg=beta"));
+}
+
+#[test]
+fn test_run_without_script_arguments_includes_script_path() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_legible"))
+        .args(["run", "tests/fixtures/valid/script_args.lbl"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("count=1"));
+}

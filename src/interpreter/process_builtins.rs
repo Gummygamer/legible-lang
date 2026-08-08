@@ -4,11 +4,20 @@
 /// command-line argument access, directory operations, process control,
 /// and random number generation.
 use std::process::Command;
+use std::sync::OnceLock;
 use rand_core::{OsRng, RngCore};
 
 use crate::errors::{ErrorCode, LegibleError, Severity, SourceLocation};
 use crate::interpreter::environment::Env;
 use crate::interpreter::value::{Callable, Value};
+
+static SCRIPT_ARGS: OnceLock<Vec<String>> = OnceLock::new();
+
+/// Record the arguments `get_args()` should return: element 0 is the script path,
+/// followed by any arguments the user passed after it on the command line.
+pub fn set_script_args(args: Vec<String>) {
+    let _ = SCRIPT_ARGS.set(args);
+}
 
 fn process_error(message: &str, suggestion: &str) -> LegibleError {
     LegibleError {
@@ -103,12 +112,13 @@ fn builtin_get_args(args: &[Value]) -> Result<Value, LegibleError> {
     if !args.is_empty() {
         return Err(process_error("get_args() expects no arguments", "Usage: get_args()"));
     }
-    let cli_args: Vec<Value> = std::env::args()
-        .skip(2) // Skip "legible" and "run"
-        .collect::<Vec<String>>()
-        .into_iter()
-        .map(Value::Text)
-        .collect();
+    let cli_args: Vec<Value> = match SCRIPT_ARGS.get() {
+        Some(script_args) => script_args.iter().cloned().map(Value::Text).collect(),
+        None => std::env::args()
+            .skip(2) // Skip "legible" and "run"
+            .map(Value::Text)
+            .collect(),
+    };
     Ok(Value::List(cli_args))
 }
 

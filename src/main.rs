@@ -15,6 +15,9 @@ enum Commands {
     Run {
         /// Path to the .lbl file
         file: String,
+        /// Arguments passed through to the script, readable with get_args()
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// Type-check and verify a Legible source file
     Check {
@@ -36,14 +39,14 @@ enum Commands {
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Run { file } => cmd_run(&file),
+        Commands::Run { file, args } => cmd_run(&file, args),
         Commands::Check { file } => cmd_check(&file),
         Commands::Fmt { file, write } => cmd_fmt(&file, write),
         Commands::Repl => cmd_repl(),
     }
 }
 
-fn cmd_run(file: &str) {
+fn cmd_run(file: &str, args: Vec<String>) {
     let source = match std::fs::read_to_string(file) {
         Ok(s) => s,
         Err(e) => {
@@ -51,6 +54,10 @@ fn cmd_run(file: &str) {
             process::exit(1);
         }
     };
+    let mut script_args = Vec::with_capacity(args.len() + 1);
+    script_args.push(file.to_string());
+    script_args.extend(args);
+    legible_lang::interpreter::process_builtins::set_script_args(script_args);
     let mut stdout = std::io::stdout();
     match legible_lang::run_source_streaming(&source, file, &mut stdout) {
         Ok(()) => {}
@@ -156,15 +163,15 @@ fn cmd_repl() {
     use legible_lang::interpreter::builtins::register_builtins;
     use legible_lang::interpreter::crypto_builtins::register_crypto_builtins;
     use legible_lang::interpreter::db_builtins::register_db_builtins;
+    use legible_lang::interpreter::environment::Environment;
     use legible_lang::interpreter::http_builtins::register_http_builtins;
     use legible_lang::interpreter::http_client_builtins::register_http_client_builtins;
     use legible_lang::interpreter::io_builtins::register_io_builtins;
     use legible_lang::interpreter::json_builtins::register_json_builtins;
     use legible_lang::interpreter::process_builtins::register_process_builtins;
     use legible_lang::interpreter::sdl_builtins::register_sdl_builtins;
-    use legible_lang::interpreter::environment::Environment;
 
-    eprintln!("Legible REPL v0.1.0 — type expressions to evaluate, Ctrl+D to exit");
+    eprintln!("Legible REPL v0.1.0 - type expressions to evaluate, Ctrl+D to exit");
     let env = Environment::new();
     register_builtins(&env);
     register_crypto_builtins(&env);
