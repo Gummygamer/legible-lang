@@ -16,6 +16,7 @@ use std::cell::RefCell;
 use errors::LegibleError;
 use interpreter::environment::Environment;
 use interpreter::builtins::register_builtins;
+use interpreter::bytes_builtins::register_bytes_builtins;
 use interpreter::crypto_builtins::register_crypto_builtins;
 use interpreter::db_builtins::register_db_builtins;
 use interpreter::http_builtins::register_http_builtins;
@@ -36,6 +37,7 @@ type Env = Rc<RefCell<Environment>>;
 /// builtin is available in the main program but missing inside a module.
 fn register_all_builtins(env: &Env) {
     register_builtins(env);
+    register_bytes_builtins(env);
     register_crypto_builtins(env);
     register_sdl_builtins(env);
     register_http_builtins(env);

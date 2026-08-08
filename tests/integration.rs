@@ -64,6 +64,34 @@ fn test_text_ops() {
     run_fixture("text_ops");
 }
 
+// --- Opaque byte buffers and bitwise integers ---
+
+#[test]
+fn test_bytes_and_bits() {
+    run_fixture("bytes_and_bits");
+}
+
+#[test]
+fn test_read_file_bytes_round_trip() {
+    let path = std::env::temp_dir().join(format!(
+        "legible-bytes-test-{}-{}.bin",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+    ));
+    std::fs::write(&path, [b'D', b'C', b'B', b'A', 0, 0, 0, 0, b'D', b'C', b'B', b'A']).unwrap();
+    let source = format!(
+        "function main(): nothing\n  intent: read and scan a binary file\n  let buffer: integer = read_file_bytes(\"{}\")\n  print(to_text(bytes_length(buffer)))\n  print(to_text(bytes_read_u32_le(buffer, 0)))\n  print(to_text(bytes_scan_words(buffer, 0, 4, 4294967295, 1094861636)))\n  print(to_text(bytes_free(buffer)))\nend\n",
+        path.to_string_lossy().replace('\\', "\\\\"),
+    );
+
+    let result = legible_lang::run_source(&source);
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(result.unwrap().trim(), "12\n1094861636\n[0, 8]\ntrue");
+}
+
 // --- Formatter idempotency ---
 
 #[test]
