@@ -29,3 +29,8 @@ pretty_assertions = "1"
 [[bench]]
 name = "interpreter_bench"
 harness = false
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
