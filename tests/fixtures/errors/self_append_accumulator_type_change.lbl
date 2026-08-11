@@ -1,0 +1,8 @@
+mutable x: a list of integer = [1, 2, 3]
+
+function sabotage(value: a list of integer): nothing
+  intent: replace the accumulator with an integer
+  set x = 5
+end
+
+set x = append(x, sabotage(x))

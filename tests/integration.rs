@@ -97,6 +97,11 @@ fn test_immutable_self_append_fails() {
 }
 
 #[test]
+fn test_self_append_accumulator_type_change_fails() {
+    check_fixture_fails("self_append_accumulator_type_change");
+}
+
+#[test]
 fn test_read_file_bytes_round_trip() {
     let path = std::env::temp_dir().join(format!(
         "legible-bytes-test-{}-{}.bin",

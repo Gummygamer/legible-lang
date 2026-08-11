@@ -348,7 +348,19 @@ fn try_self_accumulate(
             }
             Value::Mapping(entries)
         }
-        _ => unreachable!("the accumulator type was checked before it was taken"),
+        (_, taken) => {
+            let mut args = Vec::with_capacity(1 + rest.len());
+            args.push(taken);
+            args.append(&mut rest);
+            match builtin(&args) {
+                Ok(value) => value,
+                Err(error) => {
+                    let original = args.swap_remove(0);
+                    let _ = env.borrow_mut().set(target, original);
+                    return Err(error);
+                }
+            }
+        }
     };
 
     env.borrow_mut().set(target, new_value)?;
