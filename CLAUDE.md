@@ -830,6 +830,7 @@ fn register_builtins(env: &Env) {
 Uses `tiny_http` (synchronous, no async runtime). All state is stored in a `thread_local` `RefCell`.
 
 - `http_start(port: integer): nothing` — bind and start HTTP server on given port
+- `http_start_https(port: integer, cert_path: text, key_path: text): nothing` — bind and start an HTTPS (TLS) server; certificate and key are PEM files (the same file may be passed for both if it contains cert+key). Requests are then read with the same `http_next_request`/`http_respond*` builtins.
 - `http_next_request(): Request` — block until next request arrives; returns a `Record` with fields `method`, `path`, `body`, `query`, `headers`
 - `http_respond(status: integer, body: text): nothing` — send plain-text response to the current request
 - `http_respond_with_headers(status: integer, headers: a mapping from text to text, body: text): nothing` — send response with custom headers

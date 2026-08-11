@@ -4,7 +4,7 @@
 /// thread-local state pattern as SDL builtins.
 use std::cell::RefCell;
 
-use tiny_http::{Header, Response, Server, StatusCode};
+use tiny_http::{Header, Response, Server, SslConfig, StatusCode};
 
 use crate::errors::{ErrorCode, LegibleError, Severity, SourceLocation};
 use crate::interpreter::environment::Env;
@@ -35,6 +35,7 @@ fn http_error(message: &str, suggestion: &str) -> LegibleError {
 pub fn register_http_builtins(env: &Env) {
     let builtins: Vec<(&str, fn(&[Value]) -> Result<Value, LegibleError>)> = vec![
         ("http_start", builtin_http_start),
+        ("http_start_https", builtin_http_start_https),
         ("http_next_request", builtin_http_next_request),
         ("http_respond", builtin_http_respond),
         (
@@ -100,6 +101,102 @@ fn builtin_http_start(args: &[Value]) -> Result<Value, LegibleError> {
     })?;
 
     eprintln!("Legible HTTP server listening on http://0.0.0.0:{port}");
+
+    HTTP_STATE.with(|state| {
+        *state.borrow_mut() = Some(HttpState {
+            server,
+            current_request: None,
+        });
+    });
+
+    Ok(Value::None)
+}
+
+/// `http_start_https(port: integer, cert_path: text, key_path: text): nothing`
+#[allow(clippy::result_large_err)]
+fn builtin_http_start_https(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 3 {
+        return Err(http_error(
+            "http_start_https() expects 3 arguments",
+            "Usage: http_start_https(port, cert_path, key_path)",
+        ));
+    }
+    let port = match &args[0] {
+        Value::Integer(n) => *n,
+        _ => {
+            return Err(http_error(
+                "http_start_https() expects an integer port",
+                "Pass an integer port number",
+            ))
+        }
+    };
+    let cert_path = match &args[1] {
+        Value::Text(path) => path,
+        _ => {
+            return Err(http_error(
+                "http_start_https() expects a text certificate path",
+                "Pass a text path to a PEM certificate file",
+            ))
+        }
+    };
+    let key_path = match &args[2] {
+        Value::Text(path) => path,
+        _ => {
+            return Err(http_error(
+                "http_start_https() expects a text private key path",
+                "Pass a text path to a PEM private key file",
+            ))
+        }
+    };
+
+    let certificate = std::fs::read(cert_path).map_err(|e| {
+        http_error(
+            &format!("Failed to read HTTPS certificate file {cert_path}: {e}"),
+            "Check that cert_path names a readable PEM certificate file",
+        )
+    })?;
+    let private_key = std::fs::read(key_path).map_err(|e| {
+        http_error(
+            &format!("Failed to read HTTPS private key file {key_path}: {e}"),
+            "Check that key_path names a readable PEM private key file",
+        )
+    })?;
+
+    if !certificate
+        .windows(b"BEGIN CERTIFICATE".len())
+        .any(|window| window == b"BEGIN CERTIFICATE")
+    {
+        return Err(http_error(
+            &format!("HTTPS certificate file {cert_path} is not a PEM certificate"),
+            "Use openssl PEM output containing BEGIN CERTIFICATE",
+        ));
+    }
+    if !private_key
+        .windows(b"PRIVATE KEY".len())
+        .any(|window| window == b"PRIVATE KEY")
+    {
+        return Err(http_error(
+            &format!("HTTPS private key file {key_path} is not a PEM private key"),
+            "Use unencrypted openssl PEM private-key output; encrypted keys are unsupported",
+        ));
+    }
+
+    let addr = format!("0.0.0.0:{port}");
+    let server = Server::https(
+        &addr,
+        SslConfig {
+            certificate,
+            private_key,
+        },
+    )
+    .map_err(|e| {
+        http_error(
+            &format!("Failed to start HTTPS server on port {port}: {e}"),
+            "Check that the port is available and valid (1-65535), and that the PEM files are valid",
+        )
+    })?;
+
+    eprintln!("Legible HTTPS server listening on https://0.0.0.0:{port}");
 
     HTTP_STATE.with(|state| {
         *state.borrow_mut() = Some(HttpState {

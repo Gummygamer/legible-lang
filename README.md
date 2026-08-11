@@ -173,7 +173,7 @@ let result: integer = math_utils.add(1, 2)
 
 | Module | Functions | Crate |
 |--------|-----------|-------|
-| HTTP | `http_start`, `http_next_request`, `http_respond`, `http_respond_with_headers`, `http_stop` | `tiny_http` |
+| HTTP | `http_start`, `http_start_https`, `http_next_request`, `http_respond`, `http_respond_with_headers`, `http_stop` | `tiny_http` |
 | JSON | `json_parse`, `json_encode` | `serde_json` |
 | File I/O | `read_file`, `write_file`, `file_exists` | std |
 | SQLite | `db_open`, `db_close`, `db_exec`, `db_exec_params`, `db_query`, `db_query_params` | `rusqlite` |

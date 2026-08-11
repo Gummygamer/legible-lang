@@ -122,6 +122,12 @@ fn test_read_file_bytes_round_trip() {
     assert_eq!(result.unwrap().trim(), "12\n1094861636\n[0, 8]\ntrue");
 }
 
+#[test]
+fn test_http_start_https_missing_certificate_returns_error() {
+    let source = "function main(): nothing\n  intent: test HTTPS startup errors\n  http_start_https(18443, \"/nonexistent/cert.pem\", \"/nonexistent/key.pem\")\nend\n\nmain()\n";
+    assert!(legible_lang::run_source(source).is_err());
+}
+
 // --- Formatter idempotency ---
 
 #[test]
