@@ -100,7 +100,7 @@ fn builtin_shell_exec(args: &[Value]) -> Result<Value, LegibleError> {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let exit_code = output.status.code().unwrap_or(-1);
 
-    Ok(Value::Mapping(vec![
+    Ok(Value::mapping(vec![
         (Value::Text("stdout".to_string()), Value::Text(stdout)),
         (Value::Text("stderr".to_string()), Value::Text(stderr)),
         (Value::Text("exit_code".to_string()), Value::Integer(exit_code as i64)),
@@ -119,7 +119,7 @@ fn builtin_get_args(args: &[Value]) -> Result<Value, LegibleError> {
             .map(Value::Text)
             .collect(),
     };
-    Ok(Value::List(cli_args))
+    Ok(Value::list(cli_args))
 }
 
 /// `exit_process(code: integer): nothing`
@@ -160,7 +160,7 @@ fn builtin_list_dir(args: &[Value]) -> Result<Value, LegibleError> {
         }
     }
     files.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
-    Ok(Value::List(files))
+    Ok(Value::list(files))
 }
 
 /// `create_dir(path: text): nothing`

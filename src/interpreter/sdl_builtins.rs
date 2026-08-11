@@ -195,7 +195,7 @@ fn builtin_sdl_poll_events(_args: &[Value]) -> Result<Value, LegibleError> {
                 _ => {}
             }
         }
-        Ok(Value::List(events))
+        Ok(Value::list(events))
     })
 }
 

@@ -53,14 +53,14 @@ fn json_to_legible(json: &serde_json::Value) -> Value {
         }
         serde_json::Value::String(s) => Value::Text(s.clone()),
         serde_json::Value::Array(arr) => {
-            Value::List(arr.iter().map(json_to_legible).collect())
+            Value::list(arr.iter().map(json_to_legible).collect())
         }
         serde_json::Value::Object(obj) => {
             let entries: Vec<(Value, Value)> = obj
                 .iter()
                 .map(|(k, v)| (Value::Text(k.clone()), json_to_legible(v)))
                 .collect();
-            Value::Mapping(entries)
+            Value::mapping(entries)
         }
     }
 }

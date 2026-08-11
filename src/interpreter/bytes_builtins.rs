@@ -545,7 +545,7 @@ fn builtin_bytes_scan_words(args: &[Value]) -> Result<Value, LegibleError> {
                 None => break,
             }
         }
-        Ok(Value::List(matches))
+        Ok(Value::list(matches))
     })
 }
 

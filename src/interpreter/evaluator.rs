@@ -151,7 +151,7 @@ fn eval_node(
         } => {
             let iter_val = eval_expr(arena, iterable, env, output)?;
             if let Value::List(items) = iter_val {
-                for item in items {
+                for item in items.iter().cloned() {
                     let loop_env = Environment::with_parent(env);
                     loop_env.borrow_mut().define(binding.clone(), item, false);
                     for &stmt_id in &body {
@@ -261,7 +261,7 @@ fn eval_expr(
             for elem_id in elements {
                 items.push(eval_expr(arena, elem_id, env, output)?);
             }
-            Ok(Value::List(items))
+            Ok(Value::list(items))
         }
 
         NodeKind::MappingLit { entries } => {
@@ -271,7 +271,7 @@ fn eval_expr(
                 let val = eval_expr(arena, val_id, env, output)?;
                 mapping.push((key, val));
             }
-            Ok(Value::Mapping(mapping))
+            Ok(Value::mapping(mapping))
         }
 
         NodeKind::Identifier(name) => match env.borrow().get(&name) {
@@ -892,13 +892,13 @@ fn eval_filter(
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(pred)) => {
             let mut result = Vec::new();
-            for item in items {
+            for item in items.iter() {
                 let val = call_function(pred, &[item.clone()], env, output)?;
                 if let Value::Boolean(true) = val {
                     result.push(item.clone());
                 }
             }
-            Ok(Value::List(result))
+            Ok(Value::list(result))
         }
         _ => Err(runtime_error(
             "filter() expects a list and a function",
@@ -922,11 +922,11 @@ fn eval_map(
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(transform)) => {
             let mut result = Vec::new();
-            for item in items {
+            for item in items.iter() {
                 let val = call_function(transform, &[item.clone()], env, output)?;
                 result.push(val);
             }
-            Ok(Value::List(result))
+            Ok(Value::list(result))
         }
         _ => Err(runtime_error(
             "map() expects a list and a function",
@@ -950,7 +950,7 @@ fn eval_reduce(
     match (&args[0], &args[2]) {
         (Value::List(items), Value::Function(combine)) => {
             let mut acc = args[1].clone();
-            for item in items {
+            for item in items.iter() {
                 acc = call_function(combine, &[acc, item.clone()], env, output)?;
             }
             Ok(acc)
@@ -977,7 +977,7 @@ fn eval_sort_by(
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(key_fn)) => {
             let mut keyed: Vec<(Value, Value)> = Vec::new();
-            for item in items {
+            for item in items.iter() {
                 let key = call_function(key_fn, &[item.clone()], env, output)?;
                 keyed.push((key, item.clone()));
             }
@@ -989,7 +989,7 @@ fn eval_sort_by(
                 (Value::Text(a), Value::Text(b)) => a.cmp(b),
                 _ => std::cmp::Ordering::Equal,
             });
-            Ok(Value::List(keyed.into_iter().map(|(_, v)| v).collect()))
+            Ok(Value::list(keyed.into_iter().map(|(_, v)| v).collect()))
         }
         _ => Err(runtime_error(
             "sort_by() expects a list and a key function",
@@ -1008,7 +1008,7 @@ fn eval_take(args: &[Value]) -> Result<Value, LegibleError> {
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Integer(n)) => {
             let n = *n as usize;
-            Ok(Value::List(items.iter().take(n).cloned().collect()))
+            Ok(Value::list(items.iter().take(n).cloned().collect()))
         }
         _ => Err(runtime_error(
             "take() expects a list and integer",
@@ -1027,7 +1027,7 @@ fn eval_drop(args: &[Value]) -> Result<Value, LegibleError> {
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Integer(n)) => {
             let n = *n as usize;
-            Ok(Value::List(items.iter().skip(n).cloned().collect()))
+            Ok(Value::list(items.iter().skip(n).cloned().collect()))
         }
         _ => Err(runtime_error(
             "drop() expects a list and integer",
@@ -1050,7 +1050,7 @@ fn eval_find(
     }
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(pred)) => {
-            for item in items {
+            for item in items.iter() {
                 let val = call_function(pred, &[item.clone()], env, output)?;
                 if let Value::Boolean(true) = val {
                     return Ok(item.clone());

@@ -15,8 +15,8 @@ pub enum Value {
     Text(String),
     Boolean(bool),
     None,
-    List(Vec<Value>),
-    Mapping(Vec<(Value, Value)>),
+    List(Rc<Vec<Value>>),
+    Mapping(Rc<Vec<(Value, Value)>>),
     Record {
         type_name: String,
         fields: Vec<(String, Value)>,
@@ -30,6 +30,14 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn list(items: Vec<Value>) -> Value {
+        Value::List(Rc::new(items))
+    }
+
+    pub fn mapping(entries: Vec<(Value, Value)>) -> Value {
+        Value::Mapping(Rc::new(entries))
+    }
+
     /// Return a human-readable type name for error messages.
     pub fn type_name(&self) -> &'static str {
         match self {

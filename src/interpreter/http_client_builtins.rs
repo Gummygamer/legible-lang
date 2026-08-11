@@ -71,7 +71,7 @@ fn builtin_http_client_get(args: &[Value]) -> Result<Value, LegibleError> {
 
     let agent = http_agent();
     let mut request = agent.get(&url);
-    for (k, v) in &header_map {
+    for (k, v) in header_map.iter() {
         if let (Value::Text(key), Value::Text(val)) = (k, v) {
             request = request.set(key, val);
         }
@@ -81,14 +81,14 @@ fn builtin_http_client_get(args: &[Value]) -> Result<Value, LegibleError> {
         Ok(response) => {
             let status = response.status().to_string();
             let body = response.into_string().unwrap_or_default();
-            Ok(Value::Mapping(vec![
+            Ok(Value::mapping(vec![
                 (Value::Text("status".to_string()), Value::Text(status)),
                 (Value::Text("body".to_string()), Value::Text(body)),
             ]))
         }
         Err(ureq::Error::Status(code, response)) => {
             let body = response.into_string().unwrap_or_default();
-            Ok(Value::Mapping(vec![
+            Ok(Value::mapping(vec![
                 (Value::Text("status".to_string()), Value::Text(code.to_string())),
                 (Value::Text("body".to_string()), Value::Text(body)),
             ]))
@@ -134,7 +134,7 @@ fn builtin_http_client_post(args: &[Value]) -> Result<Value, LegibleError> {
 
     let agent = http_agent();
     let mut request = agent.post(&url);
-    for (k, v) in &header_map {
+    for (k, v) in header_map.iter() {
         if let (Value::Text(key), Value::Text(val)) = (k, v) {
             request = request.set(key, val);
         }
@@ -144,14 +144,14 @@ fn builtin_http_client_post(args: &[Value]) -> Result<Value, LegibleError> {
         Ok(response) => {
             let status = response.status().to_string();
             let resp_body = response.into_string().unwrap_or_default();
-            Ok(Value::Mapping(vec![
+            Ok(Value::mapping(vec![
                 (Value::Text("status".to_string()), Value::Text(status)),
                 (Value::Text("body".to_string()), Value::Text(resp_body)),
             ]))
         }
         Err(ureq::Error::Status(code, response)) => {
             let resp_body = response.into_string().unwrap_or_default();
-            Ok(Value::Mapping(vec![
+            Ok(Value::mapping(vec![
                 (Value::Text("status".to_string()), Value::Text(code.to_string())),
                 (Value::Text("body".to_string()), Value::Text(resp_body)),
             ]))

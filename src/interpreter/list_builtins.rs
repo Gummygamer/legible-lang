@@ -84,7 +84,7 @@ fn builtin_sort_integers(args: &[Value]) -> Result<Value, LegibleError> {
         })
         .collect::<Result<_, _>>()?;
     values.sort();
-    Ok(Value::List(values.into_iter().map(Value::Integer).collect()))
+    Ok(Value::list(values.into_iter().map(Value::Integer).collect()))
 }
 
 /// `sort_unique_integers(values: a list of integer): a list of integer`
@@ -102,7 +102,7 @@ fn builtin_sort_unique_integers(args: &[Value]) -> Result<Value, LegibleError> {
         .collect::<Result<_, _>>()?;
     values.sort();
     values.dedup();
-    Ok(Value::List(values.into_iter().map(Value::Integer).collect()))
+    Ok(Value::list(values.into_iter().map(Value::Integer).collect()))
 }
 
 /// `sort_text(values: a list of text): a list of text`
@@ -119,7 +119,7 @@ fn builtin_sort_text(args: &[Value]) -> Result<Value, LegibleError> {
         })
         .collect::<Result<_, _>>()?;
     values.sort();
-    Ok(Value::List(values.into_iter().map(Value::Text).collect()))
+    Ok(Value::list(values.into_iter().map(Value::Text).collect()))
 }
 
 /// `field_values(items: a list of a mapping, key: text): a list`
@@ -144,7 +144,7 @@ fn builtin_field_values(args: &[Value]) -> Result<Value, LegibleError> {
             }
         }))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Value::List(values))
+    Ok(Value::list(values))
 }
 
 /// `last_index_of(values: a list, wanted): an optional integer`

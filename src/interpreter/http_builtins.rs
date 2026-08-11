@@ -154,7 +154,7 @@ fn builtin_http_next_request(_args: &[Value]) -> Result<Value, LegibleError> {
                 ("path".to_string(), Value::Text(path)),
                 ("body".to_string(), Value::Text(body)),
                 ("query".to_string(), Value::Text(query)),
-                ("headers".to_string(), Value::Mapping(headers)),
+                ("headers".to_string(), Value::mapping(headers)),
             ],
         })
     })
@@ -260,7 +260,7 @@ fn builtin_http_respond_with_headers(args: &[Value]) -> Result<Value, LegibleErr
         let mut response = Response::from_string(&body)
             .with_status_code(StatusCode(status as u16));
 
-        for (key, val) in &header_map {
+        for (key, val) in header_map.iter() {
             if let (Value::Text(k), Value::Text(v)) = (key, val) {
                 if let Ok(header) = Header::from_bytes(k.as_bytes(), v.as_bytes()) {
                     response = response.with_header(header);

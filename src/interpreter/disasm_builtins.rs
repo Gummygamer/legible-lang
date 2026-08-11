@@ -94,7 +94,7 @@ fn operand_value(
     mem_index: String,
     mem_disp: i64,
 ) -> Value {
-    Value::Mapping(vec![
+    Value::mapping(vec![
         (Value::Text("type".to_string()), Value::Text(operand_type.to_string())),
         (Value::Text("reg".to_string()), Value::Text(reg)),
         (Value::Text("imm".to_string()), Value::Integer(imm)),
@@ -153,7 +153,7 @@ fn decoded_arm64_value(
                 _ => operand_value("other", String::new(), 0, String::new(), String::new(), 0),
             })
             .collect();
-        decoded.push(Value::Mapping(vec![
+        decoded.push(Value::mapping(vec![
             (
                 Value::Text("address".to_string()),
                 Value::Integer(instruction.address() as i64),
@@ -166,10 +166,10 @@ fn decoded_arm64_value(
                 Value::Text("op_str".to_string()),
                 Value::Text(instruction.op_str().unwrap_or("").to_string()),
             ),
-            (Value::Text("operands".to_string()), Value::List(operands)),
+            (Value::Text("operands".to_string()), Value::list(operands)),
         ]));
     }
-    Ok(Value::List(decoded))
+    Ok(Value::list(decoded))
 }
 
 fn decoded_arm32_value(
@@ -217,7 +217,7 @@ fn decoded_arm32_value(
                 _ => operand_value("other", String::new(), 0, String::new(), String::new(), 0),
             })
             .collect();
-        decoded.push(Value::Mapping(vec![
+        decoded.push(Value::mapping(vec![
             (
                 Value::Text("address".to_string()),
                 Value::Integer(instruction.address() as i64),
@@ -230,10 +230,10 @@ fn decoded_arm32_value(
                 Value::Text("op_str".to_string()),
                 Value::Text(instruction.op_str().unwrap_or("").to_string()),
             ),
-            (Value::Text("operands".to_string()), Value::List(operands)),
+            (Value::Text("operands".to_string()), Value::list(operands)),
         ]));
     }
-    Ok(Value::List(decoded))
+    Ok(Value::list(decoded))
 }
 
 /// `disasm_arm64(handle, offset, length, address): a list of mappings`
