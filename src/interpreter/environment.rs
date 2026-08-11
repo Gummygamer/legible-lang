@@ -51,6 +51,32 @@ impl Environment {
         }
     }
 
+    /// Inspect a binding without cloning it, for the accumulator fast path.
+    pub fn inspect<R>(&self, name: &str, f: impl FnOnce(&Value, bool) -> R) -> Option<R> {
+        if let Some((value, mutable)) = self.bindings.get(name) {
+            Some(f(value, *mutable))
+        } else if let Some(parent) = &self.parent {
+            parent.borrow().inspect(name, f)
+        } else {
+            None
+        }
+    }
+
+    /// Take a mutable binding without cloning it, for the accumulator fast path.
+    pub fn take_mutable(&mut self, name: &str) -> Option<Value> {
+        if let Some(binding) = self.bindings.get_mut(name) {
+            if binding.1 {
+                Some(std::mem::replace(&mut binding.0, Value::None))
+            } else {
+                None
+            }
+        } else if let Some(parent) = &self.parent {
+            parent.borrow_mut().take_mutable(name)
+        } else {
+            None
+        }
+    }
+
     /// Reassign a mutable binding. Returns an error if the name is not found
     /// or the binding is immutable.
     pub fn set(&mut self, name: &str, value: Value) -> Result<(), LegibleError> {

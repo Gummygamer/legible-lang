@@ -1,0 +1,38 @@
+function main(): nothing
+  intent: exercise self-referential collection accumulation
+  mutable out: a list of integer = []
+  for i in range(1, 4) do
+    set out = append(out, i)
+  end
+  print(out)
+  print(length(out))
+
+  mutable a: a list of integer = [1, 2]
+  let b: a list of integer = a
+  set a = append(a, 3)
+  print(a)
+  print(b)
+
+  mutable x: a list of integer = [10]
+  set x = append(x, length(x))
+  print(x)
+
+  mutable m: a mapping from text to integer = {"first": 1, "second": 2}
+  set m = put(m, "first", 10)
+  set m = put(m, "third", 3)
+  print(m)
+
+  mutable xs: a list of integer = [1]
+  let ys: a list of integer = [2, 3]
+  set xs = concat(xs, ys)
+  set xs = concat(xs, xs)
+  print(xs)
+
+  let other: a list of integer = [7]
+  set out = append(other, 1)
+  print(out)
+
+  let append: fn(a list of integer, integer): a list of integer = fn(items: a list of integer, item: integer): a list of integer => [99]
+  set out = append(out, 1)
+  print(out)
+end

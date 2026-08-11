@@ -139,6 +139,9 @@ fn eval_node(
         }
 
         NodeKind::SetStatement { name, value } => {
+            if try_self_accumulate(arena, &name, value, env, output)? {
+                return Ok(EvalSignal::Value(Value::None));
+            }
             let val = eval_expr(arena, value, env, output)?;
             env.borrow_mut().set(&name, val)?;
             Ok(EvalSignal::Value(Value::None))
@@ -240,6 +243,116 @@ fn eval_node(
             Ok(EvalSignal::Value(val))
         }
     }
+}
+
+/// Fast path for `set x = append(x, ...)` / `concat(x, ...)` / `put(x, k, v)`.
+///
+/// Returns `Ok(true)` when it handled the assignment, and `Ok(false)` when the
+/// ordinary evaluation path must be used instead.
+fn try_self_accumulate(
+    arena: &Rc<Arena>,
+    target: &str,
+    value_id: NodeId,
+    env: &Env,
+    output: &mut dyn std::io::Write,
+) -> Result<bool, LegibleError> {
+    let (callee, arguments) = match arena.get(value_id).kind.clone() {
+        NodeKind::FunctionCall { callee, arguments } => (callee, arguments),
+        _ => return Ok(false),
+    };
+
+    let fname = match &arena.get(callee).kind {
+        NodeKind::Identifier(name) => name,
+        _ => return Ok(false),
+    };
+    let expected_args = match fname.as_str() {
+        "append" | "concat" => 2,
+        "put" => 3,
+        _ => return Ok(false),
+    };
+    if arguments.len() != expected_args {
+        return Ok(false);
+    }
+
+    match &arena.get(arguments[0]).kind {
+        NodeKind::Identifier(name) if name == target => {}
+        _ => return Ok(false),
+    }
+
+    let builtin = env
+        .borrow()
+        .inspect(fname, |value, _| match value {
+            Value::Function(Callable::Builtin { name, func }) if name == fname => Some(*func),
+            _ => None,
+        })
+        .flatten();
+    let Some(builtin) = builtin else {
+        return Ok(false);
+    };
+
+    let target_is_expected_type = env
+        .borrow()
+        .inspect(target, |value, mutable| {
+            mutable
+                && matches!(
+                    (fname.as_str(), value),
+                    ("append" | "concat", Value::List(_)) | ("put", Value::Mapping(_))
+                )
+        })
+        .unwrap_or(false);
+    if !target_is_expected_type {
+        return Ok(false);
+    }
+
+    let mut rest = Vec::with_capacity(arguments.len() - 1);
+    for argument in &arguments[1..] {
+        rest.push(eval_expr(arena, *argument, env, output)?);
+    }
+
+    let Some(taken) = env.borrow_mut().take_mutable(target) else {
+        return Ok(false);
+    };
+
+    let new_value = match (fname.as_str(), taken) {
+        ("append", Value::List(mut items)) => {
+            Rc::make_mut(&mut items).push(rest.remove(0));
+            Value::List(items)
+        }
+        ("concat", Value::List(mut items)) => match rest.remove(0) {
+            Value::List(other) => {
+                Rc::make_mut(&mut items).extend(other.iter().cloned());
+                Value::List(items)
+            }
+            other => {
+                let mut args = vec![Value::List(items), other];
+                let error = builtin(&args).expect_err("concat() must reject a non-list argument");
+                let original = args.remove(0);
+                let _ = env.borrow_mut().set(target, original);
+                return Err(error);
+            }
+        },
+        ("put", Value::Mapping(mut entries)) => {
+            let key = rest.remove(0);
+            let mut value = Some(rest.remove(0));
+            let mutable_entries = Rc::make_mut(&mut entries);
+            let mut found = false;
+            for entry in mutable_entries.iter_mut() {
+                if entry.0 == key {
+                    entry.1 = value.take().unwrap();
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                mutable_entries.push((key, value.unwrap()));
+            }
+            Value::Mapping(entries)
+        }
+        _ => unreachable!("the accumulator type was checked before it was taken"),
+    };
+
+    env.borrow_mut().set(target, new_value)?;
+    Ok(true)
 }
 
 fn eval_expr(

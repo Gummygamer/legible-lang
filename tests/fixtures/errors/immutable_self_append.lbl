@@ -1,0 +1,5 @@
+function main(): nothing
+  intent: reject reassignment of immutable accumulators
+  let x: a list of integer = []
+  set x = append(x, 1)
+end

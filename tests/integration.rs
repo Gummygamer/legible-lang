@@ -87,6 +87,16 @@ fn test_list_ops() {
 }
 
 #[test]
+fn test_accumulate_in_place() {
+    run_fixture("accumulate_in_place");
+}
+
+#[test]
+fn test_immutable_self_append_fails() {
+    check_fixture_fails("immutable_self_append");
+}
+
+#[test]
 fn test_read_file_bytes_round_trip() {
     let path = std::env::temp_dir().join(format!(
         "legible-bytes-test-{}-{}.bin",
