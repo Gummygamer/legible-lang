@@ -8,6 +8,10 @@ rust-version = "1.75"
 name = "legible"
 path = "src/main.rs"
 
+[features]
+default = []
+frida = ["dep:frida-sys"]
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
@@ -21,6 +25,7 @@ argon2 = "0.5"
 capstone = "0.13"
 rand_core = { version = "0.6", features = ["getrandom"] }
 ureq = "2"
+frida-sys = { version = "0.17.2", features = ["auto-download"], optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

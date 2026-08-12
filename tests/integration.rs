@@ -128,6 +128,62 @@ fn test_http_start_https_missing_certificate_returns_error() {
     assert!(legible_lang::run_source(source).is_err());
 }
 
+// --- Optional Frida bindings ---
+
+#[test]
+#[cfg(not(feature = "frida"))]
+fn test_frida_builtin_is_registered_without_feature() {
+    let source = "function main(): nothing\n  intent: call an optional Frida builtin\n  print(frida_version())\nend\n";
+    let error = legible_lang::run_source(source).unwrap_err();
+    assert!(error.message.contains("built without Frida support"));
+    assert!(!error.message.contains("unknown function"));
+}
+
+#[test]
+#[cfg(feature = "frida")]
+fn test_frida_version_is_non_empty() {
+    let output = legible_lang::run_source(
+        "function main(): nothing\n  intent: print the Frida version\n  print(frida_version())\nend\n",
+    )
+    .unwrap();
+    assert!(!output.trim().is_empty());
+}
+
+#[test]
+#[cfg(feature = "frida")]
+fn test_frida_lists_and_opens_local_device() {
+    let output = legible_lang::run_source(
+        "function main(): nothing\n  intent: list and open the local Frida device\n  print(frida_device_ids())\n  let device: integer = frida_open_device(\"local\")\n  print(frida_device_name(\"local\"))\nend\n",
+    )
+    .unwrap();
+    assert!(output.contains("local"));
+    assert!(output.lines().nth(1).is_some_and(|name| !name.is_empty()));
+}
+
+#[test]
+#[cfg(feature = "frida")]
+fn test_frida_enumerates_processes_and_returns_missing_pid() {
+    let output = legible_lang::run_source(
+        "function main(): nothing\n  intent: inspect local Frida processes\n  let device: integer = frida_open_device(\"local\")\n  print(frida_device_process_names(device))\n  print(to_text(frida_device_process_pid(device, \"legible-name-that-cannot-exist-4eab\")))\nend\n",
+    )
+    .unwrap();
+    assert_ne!(output.lines().next().unwrap_or(""), "[]");
+    assert_eq!(output.lines().nth(1), Some("-1"));
+}
+
+#[test]
+#[cfg(feature = "frida")]
+fn test_frida_script_messages_end_to_end() {
+    let output = legible_lang::run_source(
+        "function main(): nothing\n  intent: receive send and log messages from a Frida script\n  let device: integer = frida_open_device(\"local\")\n  let pid: integer = frida_spawn(device, \"/bin/cat\")\n  let session: integer = frida_attach(device, pid)\n  let script: integer = frida_create_script(session, \"send(\\\"hello from legible\\\"); console.log(\\\"logline\\\");\")\n  frida_load_script(script)\n  frida_resume(device, pid)\n  print(frida_wait_message(script, 5000))\n  print(frida_wait_message(script, 5000))\n  frida_unload_script(script)\n  frida_detach(session)\n  frida_kill(device, pid)\nend\n",
+    )
+    .unwrap();
+    assert!(output.contains("\"type\":\"send\""));
+    assert!(output.contains("hello from legible"));
+    assert!(output.contains("\"type\":\"log\""));
+    assert!(output.contains("logline"));
+}
+
 // --- Formatter idempotency ---
 
 #[test]

@@ -164,6 +164,7 @@ fn cmd_repl() {
     use legible_lang::interpreter::crypto_builtins::register_crypto_builtins;
     use legible_lang::interpreter::db_builtins::register_db_builtins;
     use legible_lang::interpreter::environment::Environment;
+    use legible_lang::interpreter::frida_builtins::register_frida_builtins;
     use legible_lang::interpreter::http_builtins::register_http_builtins;
     use legible_lang::interpreter::http_client_builtins::register_http_client_builtins;
     use legible_lang::interpreter::io_builtins::register_io_builtins;
@@ -176,6 +177,7 @@ fn cmd_repl() {
     register_builtins(&env);
     register_crypto_builtins(&env);
     register_sdl_builtins(&env);
+    register_frida_builtins(&env);
     register_http_builtins(&env);
     register_http_client_builtins(&env);
     register_json_builtins(&env);

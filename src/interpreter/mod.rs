@@ -8,6 +8,7 @@ pub mod db_builtins;
 pub mod disasm_builtins;
 pub mod environment;
 pub mod evaluator;
+pub mod frida_builtins;
 pub mod http_builtins;
 pub mod http_client_builtins;
 pub mod io_builtins;
