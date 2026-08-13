@@ -11,20 +11,48 @@ pub mod parser;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use errors::LegibleError;
 use interpreter::environment::Environment;
 use interpreter::builtins::register_builtins;
+use interpreter::bytes_builtins::register_bytes_builtins;
 use interpreter::crypto_builtins::register_crypto_builtins;
 use interpreter::db_builtins::register_db_builtins;
+use interpreter::disasm_builtins::register_disasm_builtins;
+use interpreter::frida_builtins::register_frida_builtins;
 use interpreter::http_builtins::register_http_builtins;
 use interpreter::http_client_builtins::register_http_client_builtins;
 use interpreter::io_builtins::register_io_builtins;
 use interpreter::json_builtins::register_json_builtins;
+use interpreter::list_builtins::register_list_builtins;
 use interpreter::process_builtins::register_process_builtins;
 use interpreter::sdl_builtins::register_sdl_builtins;
 use interpreter::value::Value;
 use parser::ast::NodeKind;
+
+type Env = Rc<RefCell<Environment>>;
+
+/// Register all built-in function groups into the given environment.
+///
+/// This helper ensures both the main program and module environments
+/// receive the exact same set of builtins, preventing bugs where a
+/// builtin is available in the main program but missing inside a module.
+fn register_all_builtins(env: &Env) {
+    register_builtins(env);
+    register_bytes_builtins(env);
+    register_disasm_builtins(env);
+    register_list_builtins(env);
+    register_crypto_builtins(env);
+    register_sdl_builtins(env);
+    register_frida_builtins(env);
+    register_http_builtins(env);
+    register_http_client_builtins(env);
+    register_json_builtins(env);
+    register_io_builtins(env);
+    register_db_builtins(env);
+    register_process_builtins(env);
+}
 
 /// Run a Legible source string through the full pipeline and return stdout output.
 ///
@@ -59,16 +87,8 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
     }
 
     // Set up environment with all builtins
-    let env = Environment::new();
-    register_builtins(&env);
-    register_crypto_builtins(&env);
-    register_sdl_builtins(&env);
-    register_http_builtins(&env);
-    register_http_client_builtins(&env);
-    register_json_builtins(&env);
-    register_io_builtins(&env);
-    register_db_builtins(&env);
-    register_process_builtins(&env);
+    let env: Env = Environment::new();
+    register_all_builtins(&env);
 
     // Load modules referenced by `use` declarations
     let base_dir = Path::new(filename)
@@ -118,16 +138,8 @@ pub fn run_source_streaming(
     }
 
     // Set up environment with all builtins
-    let env = Environment::new();
-    register_builtins(&env);
-    register_crypto_builtins(&env);
-    register_sdl_builtins(&env);
-    register_http_builtins(&env);
-    register_http_client_builtins(&env);
-    register_json_builtins(&env);
-    register_io_builtins(&env);
-    register_db_builtins(&env);
-    register_process_builtins(&env);
+    let env: Env = Environment::new();
+    register_all_builtins(&env);
 
     // Load modules referenced by `use` declarations
     let base_dir = Path::new(filename)
@@ -152,7 +164,7 @@ fn load_modules(
     arena: &Rc<parser::arena::Arena>,
     root: parser::ast::NodeId,
     base_dir: &Path,
-    env: &interpreter::environment::Env,
+    env: &Env,
     loaded: &mut HashMap<String, Value>,
 ) -> Result<(), LegibleError> {
     let statements = match &arena.get(root).kind {
@@ -197,14 +209,8 @@ fn load_modules(
             let mod_arena = Rc::new(mod_parser.arena);
 
             // Set up a fresh env for the module (with builtins)
-            let mod_env = Environment::new();
-            register_builtins(&mod_env);
-            register_crypto_builtins(&mod_env);
-            register_sdl_builtins(&mod_env);
-            register_http_builtins(&mod_env);
-            register_json_builtins(&mod_env);
-            register_io_builtins(&mod_env);
-            register_db_builtins(&mod_env);
+            let mod_env: Env = Environment::new();
+            register_all_builtins(&mod_env);
 
             // Recursively load the module's own dependencies
             let mod_base_dir = module_path.parent().unwrap_or(base_dir).to_path_buf();

@@ -1,0 +1,10 @@
+function main(): nothing
+  intent: sort list values and find mapping fields and indexes
+  print(to_text(sort_integers([3, 1, 2, 1])))
+  print(to_text(sort_unique_integers([3, 1, 2, 1, 2])))
+  print(to_text(sort_text(["z", "a", "m"])))
+  let items: a list of a mapping from text to integer = [{"present": 7}, {"other": 2}, {"present": 9}]
+  print(to_text(field_values(items, "present")))
+  print(to_text(last_index_of([1, 2, 1, 3], 1)))
+  print(to_text(last_index_of([1, 2], 9)))
+end

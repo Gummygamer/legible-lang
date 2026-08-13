@@ -44,6 +44,7 @@ legible-lang/
 │   │   ├── value.rs            # Runtime value enum
 │   │   ├── builtins.rs         # Standard library functions
 │   │   ├── http_builtins.rs    # HTTP server builtins (tiny_http)
+│   │   ├── frida_builtins.rs   # Optional native Frida builtins (frida-sys)
 │   │   ├── json_builtins.rs    # JSON encode/decode builtins (serde_json)
 │   │   ├── io_builtins.rs      # File I/O builtins (read/write/exists)
 │   │   ├── db_builtins.rs      # SQLite database builtins (rusqlite)
@@ -84,9 +85,23 @@ Keep dependencies minimal. Approved crates:
 | `tiny_http`  | Synchronous HTTP server for web builtins  |
 | `sdl2`       | SDL2 bindings for graphics/input builtins |
 | `rusqlite`   | SQLite bindings for database builtins     |
+| `capstone`   | Disassembler bindings for disassembly builtins |
+| `frida-sys`  | Optional native Frida instrumentation bindings (`frida` feature) |
 | `criterion`  | Benchmarking (dev-dependency)             |
 
 Do **not** add runtime dependencies beyond these without justification. No async runtime. No allocator crates. Keep the binary lean.
+
+### Optional Frida feature
+
+Frida is deliberately off by default so normal interpreter builds do not download or link its devkit. Enable it with:
+
+```bash
+BINDGEN_EXTRA_CLANG_ARGS="-I/usr/lib/gcc/x86_64-linux-gnu/15/include" cargo build --features frida
+```
+
+The `BINDGEN_EXTRA_CLANG_ARGS` setting is required on this Linux development machine because its libclang installation lacks resource headers; it is machine-specific and must not be hardcoded in the repository. Use `frida-sys` directly, not the high-level `frida` crate. `frida_builtins.rs` is always registered: without the feature its functions return a rebuild instruction instead of being unknown.
+
+Frida builtin signatures: `frida_version(): text`; `frida_device_ids(): a list of text`; `frida_device_name(id: text): text`; `frida_open_device(id: text): integer`; `frida_usb_device(timeout_seconds: integer): integer`; `frida_device_process_names(device: integer): a list of text`; `frida_device_process_pid(device: integer, name: text): integer`; `frida_spawn(device: integer, program: text): integer`; `frida_resume(device: integer, pid: integer): nothing`; `frida_kill(device: integer, pid: integer): nothing`; `frida_attach(device: integer, pid: integer): integer`; `frida_detach(session: integer): nothing`; `frida_create_script(session: integer, source: text): integer`; `frida_load_script(script: integer): nothing`; `frida_unload_script(script: integer): nothing`; `frida_next_message(script: integer): text`; `frida_wait_message(script: integer, timeout_ms: integer): text`.
 
 ---
 
@@ -111,6 +126,7 @@ miette = { version = "7", features = ["fancy"] }
 sdl2 = "0.37"
 tiny_http = "0.12"
 rusqlite = { version = "0.39", features = ["bundled"] }
+capstone = "0.13"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -828,6 +844,7 @@ fn register_builtins(env: &Env) {
 Uses `tiny_http` (synchronous, no async runtime). All state is stored in a `thread_local` `RefCell`.
 
 - `http_start(port: integer): nothing` — bind and start HTTP server on given port
+- `http_start_https(port: integer, cert_path: text, key_path: text): nothing` — bind and start an HTTPS (TLS) server; certificate and key are PEM files (the same file may be passed for both if it contains cert+key). Requests are then read with the same `http_next_request`/`http_respond*` builtins.
 - `http_next_request(): Request` — block until next request arrives; returns a `Record` with fields `method`, `path`, `body`, `query`, `headers`
 - `http_respond(status: integer, body: text): nothing` — send plain-text response to the current request
 - `http_respond_with_headers(status: integer, headers: a mapping from text to text, body: text): nothing` — send response with custom headers

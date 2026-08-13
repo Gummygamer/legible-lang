@@ -1,0 +1,23 @@
+function main(): nothing
+  intent: exercise opaque byte buffers and bitwise integer operations
+  let buffer: integer = bytes_from_text("DCBAXXXXDCBA")
+  print(to_text(bytes_length(buffer)))
+  print(to_text(bytes_get(buffer, 0)))
+  print(to_text(bytes_read_u32_le(buffer, 0)))
+  print(to_text(bytes_index_of(buffer, "XXXX", 0)))
+  print(to_text(bytes_index_of(buffer, "missing", 0)))
+  let slice: integer = bytes_slice(buffer, 4, 4)
+  print(bytes_to_text(slice))
+  print(to_text(bytes_scan_words(buffer, 0, 4, 4294967295, 1094861636)))
+  print(to_text(bytes_scan_words(buffer, 0, 4, 4294967295, 0)))
+  print(to_text(bytes_free(slice)))
+  print(to_text(bytes_free(slice)))
+  print(to_text(bit_and(12, 10)))
+  print(to_text(bit_or(12, 10)))
+  print(to_text(bit_xor(12, 10)))
+  print(to_text(bit_not(0)))
+  print(to_text(shift_left(3, 2)))
+  print(to_text(shift_right(-8, 1)))
+  print(to_text(shift_right_unsigned(-8, 1)))
+  print(to_text(bytes_free(buffer)))
+end

@@ -1,0 +1,22 @@
+function main(): nothing
+  intent: disassemble arm instructions and create edit fill concatenate and read byte buffers
+  let arm64: a list of a mapping from text to text = disasm_arm64(bytes_from_hex("c0035fd61f2003d5"), 0, 8, 4096)
+  print(to_text(field_values(arm64, "mnemonic")))
+  print(to_text(field_values(arm64, "op_str")))
+  let arm32: a list of a mapping from text to text = disasm_arm32(bytes_from_hex("1eff2fe1"), 0, 4, 8192)
+  print(to_text(field_values(arm32, "mnemonic")))
+  let clipped: a list of a mapping from text to text = disasm_arm64(bytes_from_hex("c0035fd61f2003d5"), 4, 20, 4100)
+  print(to_text(field_values(clipped, "mnemonic")))
+  let undecodable: a list of a mapping from text to text = disasm_arm64(bytes_from_hex("ffffffff"), 0, 4, 0)
+  print(to_text(undecodable))
+  let buffer: integer = bytes_new(8)
+  print(to_text(bytes_set(buffer, 0, 17)))
+  let source: integer = bytes_from_hex("2233")
+  print(to_text(bytes_write_bytes(buffer, 1, source)))
+  print(to_text(bytes_write_u32_le(buffer, 3, 1144201745)))
+  print(to_text(bytes_read_u16_le(buffer, 3)))
+  let combined: integer = bytes_concat(buffer, bytes_from_hex("ff"))
+  print(to_text(bytes_length(combined)))
+  print(to_text(bytes_fill(buffer, 7, 1, 85)))
+  print(to_text(bytes_get(buffer, 7)))
+end

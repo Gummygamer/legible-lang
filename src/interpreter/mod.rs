@@ -2,14 +2,18 @@
 ///
 /// Tree-walking evaluator with scope-chained environments.
 pub mod builtins;
+pub mod bytes_builtins;
 pub mod crypto_builtins;
 pub mod db_builtins;
+pub mod disasm_builtins;
 pub mod environment;
 pub mod evaluator;
+pub mod frida_builtins;
 pub mod http_builtins;
 pub mod http_client_builtins;
 pub mod io_builtins;
 pub mod json_builtins;
+pub mod list_builtins;
 pub mod process_builtins;
 pub mod sdl_builtins;
 pub mod value;

@@ -4,11 +4,20 @@
 /// command-line argument access, directory operations, process control,
 /// and random number generation.
 use std::process::Command;
+use std::sync::OnceLock;
 use rand_core::{OsRng, RngCore};
 
 use crate::errors::{ErrorCode, LegibleError, Severity, SourceLocation};
 use crate::interpreter::environment::Env;
 use crate::interpreter::value::{Callable, Value};
+
+static SCRIPT_ARGS: OnceLock<Vec<String>> = OnceLock::new();
+
+/// Record the arguments `get_args()` should return: element 0 is the script path,
+/// followed by any arguments the user passed after it on the command line.
+pub fn set_script_args(args: Vec<String>) {
+    let _ = SCRIPT_ARGS.set(args);
+}
 
 fn process_error(message: &str, suggestion: &str) -> LegibleError {
     LegibleError {
@@ -91,7 +100,7 @@ fn builtin_shell_exec(args: &[Value]) -> Result<Value, LegibleError> {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let exit_code = output.status.code().unwrap_or(-1);
 
-    Ok(Value::Mapping(vec![
+    Ok(Value::mapping(vec![
         (Value::Text("stdout".to_string()), Value::Text(stdout)),
         (Value::Text("stderr".to_string()), Value::Text(stderr)),
         (Value::Text("exit_code".to_string()), Value::Integer(exit_code as i64)),
@@ -103,13 +112,14 @@ fn builtin_get_args(args: &[Value]) -> Result<Value, LegibleError> {
     if !args.is_empty() {
         return Err(process_error("get_args() expects no arguments", "Usage: get_args()"));
     }
-    let cli_args: Vec<Value> = std::env::args()
-        .skip(2) // Skip "legible" and "run"
-        .collect::<Vec<String>>()
-        .into_iter()
-        .map(Value::Text)
-        .collect();
-    Ok(Value::List(cli_args))
+    let cli_args: Vec<Value> = match SCRIPT_ARGS.get() {
+        Some(script_args) => script_args.iter().cloned().map(Value::Text).collect(),
+        None => std::env::args()
+            .skip(2) // Skip "legible" and "run"
+            .map(Value::Text)
+            .collect(),
+    };
+    Ok(Value::list(cli_args))
 }
 
 /// `exit_process(code: integer): nothing`
@@ -150,7 +160,7 @@ fn builtin_list_dir(args: &[Value]) -> Result<Value, LegibleError> {
         }
     }
     files.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
-    Ok(Value::List(files))
+    Ok(Value::list(files))
 }
 
 /// `create_dir(path: text): nothing`

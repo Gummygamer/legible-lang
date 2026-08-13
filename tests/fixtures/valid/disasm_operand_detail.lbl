@@ -1,0 +1,5 @@
+function main(): nothing
+  intent: disassemble ARM64 instructions
+  let instructions: a list of a mapping from text to text = disasm_arm64(bytes_from_hex("08000090008d0091410840f900000094"), 0, 16, 4096)
+  print(json_encode(instructions))
+end

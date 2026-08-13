@@ -200,7 +200,7 @@ fn builtin_db_query(args: &[Value]) -> Result<Value, LegibleError> {
 
         let col_names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
         let rows = collect_rows(&mut stmt, &col_names, rusqlite::params![])?;
-        Ok(Value::List(rows))
+        Ok(Value::list(rows))
     })
 }
 
@@ -231,7 +231,7 @@ fn builtin_db_query_params(args: &[Value]) -> Result<Value, LegibleError> {
         let col_names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
         let params_refs: Vec<&dyn ToSql> = sql_params.iter().map(|b| b.as_ref()).collect();
         let rows = collect_rows(&mut stmt, &col_names, params_refs.as_slice())?;
-        Ok(Value::List(rows))
+        Ok(Value::list(rows))
     })
 }
 
@@ -257,7 +257,7 @@ fn collect_rows(
             })?;
             fields.push((Value::Text(col.clone()), sql_to_value(raw)));
         }
-        rows_out.push(Value::Mapping(fields));
+        rows_out.push(Value::mapping(fields));
     }
 
     Ok(rows_out)

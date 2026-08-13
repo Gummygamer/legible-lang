@@ -29,6 +29,16 @@ cargo install --path .
 
 This builds a release binary and places it in `~/.cargo/bin/legible`, which is on your `PATH` if you installed Rust via rustup. After that, `legible` works from any directory.
 
+### Optional Frida support
+
+Frida support is off by default, so ordinary builds do not download or link Frida. Build or install it explicitly when native instrumentation builtins are needed:
+
+```bash
+BINDGEN_EXTRA_CLANG_ARGS="-I/usr/lib/gcc/x86_64-linux-gnu/15/include" cargo install --path . --features frida
+```
+
+On this Linux development machine the `BINDGEN_EXTRA_CLANG_ARGS` setting is required because libclang's resource headers are not installed alongside libclang. It is machine-specific: adjust or omit it when the local Clang installation can already find standard headers.
+
 **Update** after pulling new changes:
 
 ```bash
@@ -173,10 +183,27 @@ let result: integer = math_utils.add(1, 2)
 
 | Module | Functions | Crate |
 |--------|-----------|-------|
-| HTTP | `http_start`, `http_next_request`, `http_respond`, `http_respond_with_headers`, `http_stop` | `tiny_http` |
+| HTTP | `http_start`, `http_start_https`, `http_next_request`, `http_respond`, `http_respond_with_headers`, `http_stop` | `tiny_http` |
 | JSON | `json_parse`, `json_encode` | `serde_json` |
 | File I/O | `read_file`, `write_file`, `file_exists` | std |
 | SQLite | `db_open`, `db_close`, `db_exec`, `db_exec_params`, `db_query`, `db_query_params` | `rusqlite` |
+| Frida (optional) | `frida_version`, `frida_device_ids`, `frida_device_name`, `frida_open_device`, `frida_usb_device`, `frida_device_process_names`, `frida_device_process_pid`, `frida_spawn`, `frida_resume`, `frida_kill`, `frida_attach`, `frida_detach`, `frida_create_script`, `frida_load_script`, `frida_unload_script`, `frida_next_message`, `frida_wait_message` | `frida-sys` |
+
+### Frida Builtins (optional feature)
+
+These functions require a binary built with `--features frida`. Handles are opaque integer values returned by the corresponding open, attach, or create operation.
+
+| Function | Signature |
+|---|---|
+| Version | `frida_version(): text` |
+| Devices | `frida_device_ids(): a list of text`; `frida_device_name(id: text): text`; `frida_open_device(id: text): integer`; `frida_usb_device(timeout_seconds: integer): integer` |
+| Processes | `frida_device_process_names(device: integer): a list of text`; `frida_device_process_pid(device: integer, name: text): integer` |
+| Process lifecycle | `frida_spawn(device: integer, program: text): integer`; `frida_resume(device: integer, pid: integer): nothing`; `frida_kill(device: integer, pid: integer): nothing` |
+| Sessions | `frida_attach(device: integer, pid: integer): integer`; `frida_detach(session: integer): nothing` |
+| Scripts | `frida_create_script(session: integer, source: text): integer`; `frida_load_script(script: integer): nothing`; `frida_unload_script(script: integer): nothing` |
+| Messages | `frida_next_message(script: integer): text`; `frida_wait_message(script: integer, timeout_ms: integer): text` |
+
+`frida_next_message` is non-blocking; `frida_wait_message` returns empty text on timeout. Script messages are raw Frida JSON text. A non-Frida binary still registers these names and reports how to rebuild when one is called.
 
 ## Error Messages
 

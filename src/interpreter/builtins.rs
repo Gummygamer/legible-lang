@@ -1,4 +1,6 @@
 /// Built-in functions for the Legible standard library.
+use std::rc::Rc;
+
 use crate::errors::{LegibleError, ErrorCode, Severity, SourceLocation};
 use crate::interpreter::environment::Env;
 use crate::interpreter::value::{Callable, Value};
@@ -117,8 +119,8 @@ fn builtin_append(args: &[Value]) -> Result<Value, LegibleError> {
     }
     match &args[0] {
         Value::List(items) => {
-            let mut new_items = items.clone();
-            new_items.push(args[1].clone());
+            let mut new_items = Rc::clone(items);
+            Rc::make_mut(&mut new_items).push(args[1].clone());
             Ok(Value::List(new_items))
         }
         _ => Err(builtin_error("append() expects a list as first argument", "Pass a list")),
@@ -131,8 +133,8 @@ fn builtin_concat_list(args: &[Value]) -> Result<Value, LegibleError> {
     }
     match (&args[0], &args[1]) {
         (Value::List(a), Value::List(b)) => {
-            let mut result = a.clone();
-            result.extend(b.iter().cloned());
+            let mut result = Rc::clone(a);
+            Rc::make_mut(&mut result).extend(b.iter().cloned());
             Ok(Value::List(result))
         }
         _ => Err(builtin_error("concat() expects two lists", "Pass two lists")),
@@ -156,7 +158,7 @@ fn builtin_range(args: &[Value]) -> Result<Value, LegibleError> {
     match (&args[0], &args[1]) {
         (Value::Integer(start), Value::Integer(end)) => {
             let items: Vec<Value> = (*start..*end).map(Value::Integer).collect();
-            Ok(Value::List(items))
+            Ok(Value::list(items))
         }
         _ => Err(builtin_error("range() expects two integers", "Pass two integers")),
     }
@@ -169,7 +171,7 @@ fn builtin_split(args: &[Value]) -> Result<Value, LegibleError> {
     match (&args[0], &args[1]) {
         (Value::Text(s), Value::Text(d)) => {
             let parts: Vec<Value> = s.split(d.as_str()).map(|p| Value::Text(p.to_string())).collect();
-            Ok(Value::List(parts))
+            Ok(Value::list(parts))
         }
         _ => Err(builtin_error("split() expects two text arguments", "Pass two text values")),
     }
@@ -253,7 +255,7 @@ fn builtin_keys(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Mapping(entries)) => {
             let keys: Vec<Value> = entries.iter().map(|(k, _)| k.clone()).collect();
-            Ok(Value::List(keys))
+            Ok(Value::list(keys))
         }
         _ => Err(builtin_error("keys() expects a mapping", "Pass a mapping")),
     }
@@ -263,7 +265,7 @@ fn builtin_values(args: &[Value]) -> Result<Value, LegibleError> {
     match args.first() {
         Some(Value::Mapping(entries)) => {
             let vals: Vec<Value> = entries.iter().map(|(_, v)| v.clone()).collect();
-            Ok(Value::List(vals))
+            Ok(Value::list(vals))
         }
         _ => Err(builtin_error("values() expects a mapping", "Pass a mapping")),
     }
@@ -288,7 +290,7 @@ fn builtin_get(args: &[Value]) -> Result<Value, LegibleError> {
     }
     match (&args[0], &args[1]) {
         (Value::Mapping(entries), key) => {
-            for (k, v) in entries {
+            for (k, v) in entries.iter() {
                 if k == key {
                     return Ok(v.clone());
                 }
@@ -313,18 +315,21 @@ fn builtin_put(args: &[Value]) -> Result<Value, LegibleError> {
     }
     match &args[0] {
         Value::Mapping(entries) => {
-            let mut new_entries = entries.clone();
+            let mut new_entries = Rc::clone(entries);
             // Update existing or add new
             let mut found = false;
-            for entry in &mut new_entries {
-                if entry.0 == args[1] {
-                    entry.1 = args[2].clone();
-                    found = true;
-                    break;
+            {
+                let new_entries = Rc::make_mut(&mut new_entries);
+                for entry in new_entries.iter_mut() {
+                    if entry.0 == args[1] {
+                        entry.1 = args[2].clone();
+                        found = true;
+                        break;
+                    }
                 }
-            }
-            if !found {
-                new_entries.push((args[1].clone(), args[2].clone()));
+                if !found {
+                    new_entries.push((args[1].clone(), args[2].clone()));
+                }
             }
             Ok(Value::Mapping(new_entries))
         }

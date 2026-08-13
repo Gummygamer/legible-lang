@@ -139,6 +139,9 @@ fn eval_node(
         }
 
         NodeKind::SetStatement { name, value } => {
+            if try_self_accumulate(arena, &name, value, env, output)? {
+                return Ok(EvalSignal::Value(Value::None));
+            }
             let val = eval_expr(arena, value, env, output)?;
             env.borrow_mut().set(&name, val)?;
             Ok(EvalSignal::Value(Value::None))
@@ -151,7 +154,7 @@ fn eval_node(
         } => {
             let iter_val = eval_expr(arena, iterable, env, output)?;
             if let Value::List(items) = iter_val {
-                for item in items {
+                for item in items.iter().cloned() {
                     let loop_env = Environment::with_parent(env);
                     loop_env.borrow_mut().define(binding.clone(), item, false);
                     for &stmt_id in &body {
@@ -242,6 +245,128 @@ fn eval_node(
     }
 }
 
+/// Fast path for `set x = append(x, ...)` / `concat(x, ...)` / `put(x, k, v)`.
+///
+/// Returns `Ok(true)` when it handled the assignment, and `Ok(false)` when the
+/// ordinary evaluation path must be used instead.
+fn try_self_accumulate(
+    arena: &Rc<Arena>,
+    target: &str,
+    value_id: NodeId,
+    env: &Env,
+    output: &mut dyn std::io::Write,
+) -> Result<bool, LegibleError> {
+    let (callee, arguments) = match arena.get(value_id).kind.clone() {
+        NodeKind::FunctionCall { callee, arguments } => (callee, arguments),
+        _ => return Ok(false),
+    };
+
+    let fname = match &arena.get(callee).kind {
+        NodeKind::Identifier(name) => name,
+        _ => return Ok(false),
+    };
+    let expected_args = match fname.as_str() {
+        "append" | "concat" => 2,
+        "put" => 3,
+        _ => return Ok(false),
+    };
+    if arguments.len() != expected_args {
+        return Ok(false);
+    }
+
+    match &arena.get(arguments[0]).kind {
+        NodeKind::Identifier(name) if name == target => {}
+        _ => return Ok(false),
+    }
+
+    let builtin = env
+        .borrow()
+        .inspect(fname, |value, _| match value {
+            Value::Function(Callable::Builtin { name, func }) if name == fname => Some(*func),
+            _ => None,
+        })
+        .flatten();
+    let Some(builtin) = builtin else {
+        return Ok(false);
+    };
+
+    let target_is_expected_type = env
+        .borrow()
+        .inspect(target, |value, mutable| {
+            mutable
+                && matches!(
+                    (fname.as_str(), value),
+                    ("append" | "concat", Value::List(_)) | ("put", Value::Mapping(_))
+                )
+        })
+        .unwrap_or(false);
+    if !target_is_expected_type {
+        return Ok(false);
+    }
+
+    let mut rest = Vec::with_capacity(arguments.len() - 1);
+    for argument in &arguments[1..] {
+        rest.push(eval_expr(arena, *argument, env, output)?);
+    }
+
+    let Some(taken) = env.borrow_mut().take_mutable(target) else {
+        return Ok(false);
+    };
+
+    let new_value = match (fname.as_str(), taken) {
+        ("append", Value::List(mut items)) => {
+            Rc::make_mut(&mut items).push(rest.remove(0));
+            Value::List(items)
+        }
+        ("concat", Value::List(mut items)) => match rest.remove(0) {
+            Value::List(other) => {
+                Rc::make_mut(&mut items).extend(other.iter().cloned());
+                Value::List(items)
+            }
+            other => {
+                let mut args = vec![Value::List(items), other];
+                let error = builtin(&args).expect_err("concat() must reject a non-list argument");
+                let original = args.remove(0);
+                let _ = env.borrow_mut().set(target, original);
+                return Err(error);
+            }
+        },
+        ("put", Value::Mapping(mut entries)) => {
+            let key = rest.remove(0);
+            let mut value = Some(rest.remove(0));
+            let mutable_entries = Rc::make_mut(&mut entries);
+            let mut found = false;
+            for entry in mutable_entries.iter_mut() {
+                if entry.0 == key {
+                    entry.1 = value.take().unwrap();
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                mutable_entries.push((key, value.unwrap()));
+            }
+            Value::Mapping(entries)
+        }
+        (_, taken) => {
+            let mut args = Vec::with_capacity(1 + rest.len());
+            args.push(taken);
+            args.append(&mut rest);
+            match builtin(&args) {
+                Ok(value) => value,
+                Err(error) => {
+                    let original = args.swap_remove(0);
+                    let _ = env.borrow_mut().set(target, original);
+                    return Err(error);
+                }
+            }
+        }
+    };
+
+    env.borrow_mut().set(target, new_value)?;
+    Ok(true)
+}
+
 fn eval_expr(
     arena: &Rc<Arena>,
     node_id: NodeId,
@@ -261,7 +386,7 @@ fn eval_expr(
             for elem_id in elements {
                 items.push(eval_expr(arena, elem_id, env, output)?);
             }
-            Ok(Value::List(items))
+            Ok(Value::list(items))
         }
 
         NodeKind::MappingLit { entries } => {
@@ -271,7 +396,7 @@ fn eval_expr(
                 let val = eval_expr(arena, val_id, env, output)?;
                 mapping.push((key, val));
             }
-            Ok(Value::Mapping(mapping))
+            Ok(Value::mapping(mapping))
         }
 
         NodeKind::Identifier(name) => match env.borrow().get(&name) {
@@ -892,13 +1017,13 @@ fn eval_filter(
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(pred)) => {
             let mut result = Vec::new();
-            for item in items {
+            for item in items.iter() {
                 let val = call_function(pred, &[item.clone()], env, output)?;
                 if let Value::Boolean(true) = val {
                     result.push(item.clone());
                 }
             }
-            Ok(Value::List(result))
+            Ok(Value::list(result))
         }
         _ => Err(runtime_error(
             "filter() expects a list and a function",
@@ -922,11 +1047,11 @@ fn eval_map(
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(transform)) => {
             let mut result = Vec::new();
-            for item in items {
+            for item in items.iter() {
                 let val = call_function(transform, &[item.clone()], env, output)?;
                 result.push(val);
             }
-            Ok(Value::List(result))
+            Ok(Value::list(result))
         }
         _ => Err(runtime_error(
             "map() expects a list and a function",
@@ -950,7 +1075,7 @@ fn eval_reduce(
     match (&args[0], &args[2]) {
         (Value::List(items), Value::Function(combine)) => {
             let mut acc = args[1].clone();
-            for item in items {
+            for item in items.iter() {
                 acc = call_function(combine, &[acc, item.clone()], env, output)?;
             }
             Ok(acc)
@@ -977,7 +1102,7 @@ fn eval_sort_by(
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(key_fn)) => {
             let mut keyed: Vec<(Value, Value)> = Vec::new();
-            for item in items {
+            for item in items.iter() {
                 let key = call_function(key_fn, &[item.clone()], env, output)?;
                 keyed.push((key, item.clone()));
             }
@@ -989,7 +1114,7 @@ fn eval_sort_by(
                 (Value::Text(a), Value::Text(b)) => a.cmp(b),
                 _ => std::cmp::Ordering::Equal,
             });
-            Ok(Value::List(keyed.into_iter().map(|(_, v)| v).collect()))
+            Ok(Value::list(keyed.into_iter().map(|(_, v)| v).collect()))
         }
         _ => Err(runtime_error(
             "sort_by() expects a list and a key function",
@@ -1008,7 +1133,7 @@ fn eval_take(args: &[Value]) -> Result<Value, LegibleError> {
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Integer(n)) => {
             let n = *n as usize;
-            Ok(Value::List(items.iter().take(n).cloned().collect()))
+            Ok(Value::list(items.iter().take(n).cloned().collect()))
         }
         _ => Err(runtime_error(
             "take() expects a list and integer",
@@ -1027,7 +1152,7 @@ fn eval_drop(args: &[Value]) -> Result<Value, LegibleError> {
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Integer(n)) => {
             let n = *n as usize;
-            Ok(Value::List(items.iter().skip(n).cloned().collect()))
+            Ok(Value::list(items.iter().skip(n).cloned().collect()))
         }
         _ => Err(runtime_error(
             "drop() expects a list and integer",
@@ -1050,7 +1175,7 @@ fn eval_find(
     }
     match (&args[0], &args[1]) {
         (Value::List(items), Value::Function(pred)) => {
-            for item in items {
+            for item in items.iter() {
                 let val = call_function(pred, &[item.clone()], env, output)?;
                 if let Value::Boolean(true) = val {
                     return Ok(item.clone());
