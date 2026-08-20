@@ -170,12 +170,14 @@ fn cmd_repl() {
     use legible_lang::interpreter::io_builtins::register_io_builtins;
     use legible_lang::interpreter::json_builtins::register_json_builtins;
     use legible_lang::interpreter::process_builtins::register_process_builtins;
+    #[cfg(feature = "sdl")]
     use legible_lang::interpreter::sdl_builtins::register_sdl_builtins;
 
     eprintln!("Legible REPL v0.1.0 - type expressions to evaluate, Ctrl+D to exit");
     let env = Environment::new();
     register_builtins(&env);
     register_crypto_builtins(&env);
+    #[cfg(feature = "sdl")]
     register_sdl_builtins(&env);
     register_frida_builtins(&env);
     register_http_builtins(&env);

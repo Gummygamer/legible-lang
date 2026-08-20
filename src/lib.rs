@@ -27,6 +27,7 @@ use interpreter::io_builtins::register_io_builtins;
 use interpreter::json_builtins::register_json_builtins;
 use interpreter::list_builtins::register_list_builtins;
 use interpreter::process_builtins::register_process_builtins;
+#[cfg(feature = "sdl")]
 use interpreter::sdl_builtins::register_sdl_builtins;
 use interpreter::value::Value;
 use parser::ast::NodeKind;
@@ -44,6 +45,7 @@ fn register_all_builtins(env: &Env) {
     register_disasm_builtins(env);
     register_list_builtins(env);
     register_crypto_builtins(env);
+    #[cfg(feature = "sdl")]
     register_sdl_builtins(env);
     register_frida_builtins(env);
     register_http_builtins(env);

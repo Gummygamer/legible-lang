@@ -15,6 +15,7 @@ pub mod io_builtins;
 pub mod json_builtins;
 pub mod list_builtins;
 pub mod process_builtins;
+#[cfg(feature = "sdl")]
 pub mod sdl_builtins;
 pub mod value;
 
