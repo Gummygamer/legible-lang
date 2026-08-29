@@ -1019,6 +1019,7 @@ dependencies = [
  "capstone",
  "clap",
  "criterion",
+ "flate2",
  "frida-sys",
  "miette",
  "png",

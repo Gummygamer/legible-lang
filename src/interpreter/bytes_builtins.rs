@@ -37,6 +37,7 @@ pub fn register_bytes_builtins(env: &Env) {
         ("bytes_length", builtin_bytes_length),
         ("bytes_get", builtin_bytes_get),
         ("bytes_slice", builtin_bytes_slice),
+        ("bytes_inflate", builtin_bytes_inflate),
         ("bytes_to_text", builtin_bytes_to_text),
         ("bytes_read_u32_le", builtin_bytes_read_u32_le),
         ("bytes_read_u16_le", builtin_bytes_read_u16_le),
@@ -317,6 +318,35 @@ fn builtin_bytes_slice(args: &[Value]) -> Result<Value, LegibleError> {
             })
     })?;
     store_buffer(slice)
+}
+
+/// `bytes_inflate(source_handle: integer, expected_size: integer): integer`
+fn builtin_bytes_inflate(args: &[Value]) -> Result<Value, LegibleError> {
+    use std::io::Read;
+
+    require_arity(args, "bytes_inflate", 2)?;
+    let handle = expect_integer(args, 0, "bytes_inflate")?;
+    let expected = expect_integer(args, 1, "bytes_inflate")?;
+    let compressed = with_buffer(handle, |buffer| Ok(buffer.to_vec()))?;
+    let mut output = Vec::new();
+    flate2::read::DeflateDecoder::new(&compressed[..])
+        .read_to_end(&mut output)
+        .map_err(|error| {
+            bytes_error(
+                &format!("bytes_inflate() could not decompress the DEFLATE stream: {error}"),
+                "Pass a valid raw-DEFLATE (ZIP method 8) byte buffer",
+            )
+        })?;
+    if expected > 0 && output.len() as i64 != expected {
+        return Err(bytes_error(
+            &format!(
+                "bytes_inflate() produced {} bytes, expected {expected}",
+                output.len()
+            ),
+            "The declared uncompressed size does not match the stream",
+        ));
+    }
+    store_buffer(output)
 }
 
 /// `bytes_to_text(handle: integer): text`
@@ -637,4 +667,51 @@ fn builtin_shift_right(args: &[Value]) -> Result<Value, LegibleError> {
 fn builtin_shift_right_unsigned(args: &[Value]) -> Result<Value, LegibleError> {
     let (value, amount) = shift_amount(args, "shift_right_unsigned")?;
     Ok(Value::Integer(((value as u64) >> amount) as i64))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn inflate(input: Vec<u8>, expected: i64) -> Result<Vec<u8>, LegibleError> {
+        let source = store_buffer(input)?;
+        let Value::Integer(source_handle) = source else {
+            unreachable!("byte buffers use integer handles");
+        };
+        let output =
+            builtin_bytes_inflate(&[Value::Integer(source_handle), Value::Integer(expected)])?;
+        let Value::Integer(output_handle) = output else {
+            unreachable!("byte buffers use integer handles");
+        };
+        with_buffer(output_handle, |buffer| Ok(buffer.to_vec()))
+    }
+
+    #[test]
+    fn inflates_raw_deflate_stream() {
+        let compressed = vec![0xcb, 0x4d, 0xcc, 0xcb, 0x4c, 0x4b, 0x2d, 0x2e, 0x01, 0x00];
+        assert_eq!(inflate(compressed, 8).unwrap(), b"manifest");
+    }
+
+    #[test]
+    fn inflates_raw_stored_deflate_block() {
+        let literal = b"hello";
+        let length = literal.len() as u16;
+        let mut compressed = vec![0x01];
+        compressed.extend_from_slice(&length.to_le_bytes());
+        compressed.extend_from_slice(&(!length).to_le_bytes());
+        compressed.extend_from_slice(literal);
+        assert_eq!(inflate(compressed, literal.len() as i64).unwrap(), literal);
+    }
+
+    #[test]
+    fn rejects_inflate_size_mismatch() {
+        let compressed = vec![0xcb, 0x4d, 0xcc, 0xcb, 0x4c, 0x4b, 0x2d, 0x2e, 0x01, 0x00];
+        assert!(inflate(compressed, 7).is_err());
+    }
+
+    #[test]
+    fn rejects_truncated_or_garbage_inflate_stream() {
+        assert!(inflate(vec![0xcb, 0x4d], 8).is_err());
+        assert!(inflate(vec![0xff, 0xff, 0xff], 0).is_err());
+    }
 }
