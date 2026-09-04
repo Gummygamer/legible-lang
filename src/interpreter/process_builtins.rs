@@ -40,6 +40,7 @@ pub fn register_process_builtins(env: &Env) {
         ("list_dir", builtin_list_dir),
         ("create_dir", builtin_create_dir),
         ("get_cwd", builtin_get_cwd),
+        ("chdir", builtin_chdir),
         ("path_join", builtin_path_join),
         ("is_dir", builtin_is_dir),
         ("random_int", builtin_random_int),
@@ -189,6 +190,35 @@ fn builtin_get_cwd(_args: &[Value]) -> Result<Value, LegibleError> {
         process_error(&format!("Failed to get current directory: {e}"), "Check permissions")
     })?;
     Ok(Value::Text(cwd.to_string_lossy().to_string()))
+}
+
+/// `chdir(path: text): nothing`
+///
+/// Change the process-wide current working directory. Relative paths are
+/// resolved against the current working directory before switching.
+fn builtin_chdir(args: &[Value]) -> Result<Value, LegibleError> {
+    if args.len() != 1 {
+        return Err(process_error("chdir() expects 1 argument", "Usage: chdir(path)"));
+    }
+    let path = match &args[0] {
+        Value::Text(s) => s,
+        _ => return Err(process_error("chdir() expects a text path", "Pass a directory path as text")),
+    };
+
+    let target = std::path::Path::new(path);
+    if !target.is_dir() {
+        return Err(process_error(
+            &format!("chdir() target is not a directory: '{path}'"),
+            "Pass an existing directory path",
+        ));
+    }
+    std::env::set_current_dir(target).map_err(|e| {
+        process_error(
+            &format!("Failed to change directory to '{path}': {e}"),
+            "Check the directory exists and is accessible",
+        )
+    })?;
+    Ok(Value::None)
 }
 
 /// `path_join(parts: a list of text): text`
