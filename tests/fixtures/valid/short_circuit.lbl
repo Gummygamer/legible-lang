@@ -1,0 +1,20 @@
+function has_positive_first(items: a list of integer): boolean
+  intent: report whether the list has a first element that is positive without reading past the end
+  length(items) > 0 and get_first(items) > 0
+end
+
+function get_first(items: a list of integer): integer
+  intent: return the first element of the list
+  unwrap(find(items, fn(item: integer): boolean => true))
+end
+
+function main(): nothing
+  intent: show that and and or skip the right operand when the left one decides the result
+  let empty: a list of integer = []
+  let table: a mapping from text to integer = {"a": 1}
+  print(to_text(has_positive_first(empty)))
+  print(to_text(has_positive_first([3])))
+  print(to_text(has_key(table, "b") and unwrap(get(table, "b")) == 1))
+  print(to_text(not has_key(table, "b") or unwrap(get(table, "b")) == 1))
+  print(to_text(has_key(table, "a") or unwrap(get(table, "b")) == 1))
+end

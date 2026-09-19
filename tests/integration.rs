@@ -240,3 +240,8 @@ fn test_run_without_script_arguments_includes_script_path() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("count=1"));
 }
+
+#[test]
+fn test_short_circuit() {
+    run_fixture("short_circuit");
+}

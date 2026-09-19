@@ -561,6 +561,14 @@ fn eval_expr(
 
         NodeKind::BinaryOp { left, op, right } => {
             let lhs = eval_expr(arena, left, env, output)?;
+            // `and` / `or` short-circuit: the right operand is only evaluated
+            // when the left one does not already decide the result, so guards
+            // such as `has_key(m, k) and get(m, k) == v` never touch a missing key.
+            match (&op, &lhs) {
+                (BinaryOperator::And, Value::Boolean(false)) => return Ok(Value::Boolean(false)),
+                (BinaryOperator::Or, Value::Boolean(true)) => return Ok(Value::Boolean(true)),
+                _ => {}
+            }
             let rhs = eval_expr(arena, right, env, output)?;
             eval_binary_op(&lhs, &op, &rhs)
         }
