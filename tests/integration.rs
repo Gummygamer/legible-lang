@@ -31,6 +31,16 @@ fn test_fizzbuzz() {
 }
 
 #[test]
+fn test_prepared_program_matches_source_run() {
+    let source = fs::read_to_string("tests/fixtures/valid/fizzbuzz.lbl").unwrap();
+    let expected = legible_lang::run_source(&source).unwrap();
+    let prepared = legible_lang::prepare_source(&source).unwrap();
+    let mut output = Vec::new();
+    prepared.run(&mut output).unwrap();
+    assert_eq!(String::from_utf8(output).unwrap(), expected);
+}
+
+#[test]
 fn test_pipelines() {
     run_fixture("pipelines");
 }

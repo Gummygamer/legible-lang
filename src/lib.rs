@@ -65,12 +65,50 @@ pub fn run_source(source: &str) -> Result<String, LegibleError> {
 
 /// Run a Legible source string with a given filename for error reporting.
 pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, LegibleError> {
+    let prepared = prepare_source_with_filename(source, filename)?;
+    let mut output = Vec::new();
+    prepared.run(&mut output)?;
+    Ok(String::from_utf8_lossy(&output).to_string())
+}
+
+/// Parsed and statically checked program ready for repeated execution.
+///
+/// Keeping preparation separate makes it possible for embedders and benchmarks
+/// to measure sustained execution without charging parsing, analysis, or AST
+/// allocation to every iteration. Each call to `run` still creates a fresh
+/// environment, so mutable program state does not leak between runs.
+pub struct PreparedProgram {
+    arena: Rc<parser::arena::Arena>,
+    root: parser::ast::NodeId,
+    base_dir: PathBuf,
+}
+
+impl PreparedProgram {
+    /// Execute this program with a fresh builtin/module environment.
+    pub fn run(&self, output: &mut dyn std::io::Write) -> Result<(), LegibleError> {
+        let env: Env = Environment::new();
+        register_all_builtins(&env);
+        load_modules(&self.arena, self.root, &self.base_dir, &env, &mut HashMap::new())?;
+        interpreter::evaluate_program_rc(&self.arena, self.root, &env, output)?;
+        Ok(())
+    }
+}
+
+/// Parse and statically check source once, returning a reusable program.
+pub fn prepare_source(source: &str) -> Result<PreparedProgram, LegibleError> {
+    prepare_source_with_filename(source, "<input>")
+}
+
+/// Parse and statically check source once with a filename for diagnostics.
+pub fn prepare_source_with_filename(
+    source: &str,
+    filename: &str,
+) -> Result<PreparedProgram, LegibleError> {
     let tokens = lexer::scan(source)?;
     let mut parser_inst = parser::Parser::new(tokens, filename, source);
     let root = parser_inst.parse_program()?;
     let arena = parser_inst.arena;
 
-    // Run static analysis
     let contract_errors = analyzer::contracts::check_contracts(&arena, root, source);
     for err in &contract_errors {
         err.emit_json();
@@ -84,28 +122,18 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
 
     check_types(&arena, root, source, filename)?;
 
-    // Intent verification (warnings only)
-    let intent_warnings = analyzer::intent::verify_intents(&arena, root);
-    for warning in &intent_warnings {
+    for warning in analyzer::intent::verify_intents(&arena, root) {
         warning.emit_json();
     }
 
-    // Set up environment with all builtins
-    let env: Env = Environment::new();
-    register_all_builtins(&env);
-
-    // Load modules referenced by `use` declarations
-    let base_dir = Path::new(filename)
-        .parent()
-        .unwrap_or(Path::new("."))
-        .to_path_buf();
-    let arena_rc = Rc::new(arena);
-    load_modules(&arena_rc, root, &base_dir, &env, &mut HashMap::new())?;
-
-    // Evaluate
-    let mut output = Vec::new();
-    interpreter::evaluate_program_rc(&arena_rc, root, &env, &mut output)?;
-    Ok(String::from_utf8_lossy(&output).to_string())
+    Ok(PreparedProgram {
+        arena: Rc::new(arena),
+        root,
+        base_dir: Path::new(filename)
+            .parent()
+            .unwrap_or(Path::new("."))
+            .to_path_buf(),
+    })
 }
 
 /// Type check a parsed program, emitting every diagnostic as JSON on stderr.
@@ -141,46 +169,7 @@ pub fn run_source_streaming(
     filename: &str,
     output: &mut dyn std::io::Write,
 ) -> Result<(), LegibleError> {
-    let tokens = lexer::scan(source)?;
-    let mut parser_inst = parser::Parser::new(tokens, filename, source);
-    let root = parser_inst.parse_program()?;
-    let arena = parser_inst.arena;
-
-    // Run static analysis
-    let contract_errors = analyzer::contracts::check_contracts(&arena, root, source);
-    for err in &contract_errors {
-        err.emit_json();
-    }
-    if contract_errors
-        .iter()
-        .any(|e| matches!(e.severity, errors::Severity::Error))
-    {
-        return Err(contract_errors.into_iter().next().unwrap());
-    }
-
-    check_types(&arena, root, source, filename)?;
-
-    // Intent verification (warnings only)
-    let intent_warnings = analyzer::intent::verify_intents(&arena, root);
-    for warning in &intent_warnings {
-        warning.emit_json();
-    }
-
-    // Set up environment with all builtins
-    let env: Env = Environment::new();
-    register_all_builtins(&env);
-
-    // Load modules referenced by `use` declarations
-    let base_dir = Path::new(filename)
-        .parent()
-        .unwrap_or(Path::new("."))
-        .to_path_buf();
-    let arena_rc = Rc::new(arena);
-    load_modules(&arena_rc, root, &base_dir, &env, &mut HashMap::new())?;
-
-    // Evaluate with streaming output
-    interpreter::evaluate_program_rc(&arena_rc, root, &env, output)?;
-    Ok(())
+    prepare_source_with_filename(source, filename)?.run(output)
 }
 
 /// Scan a program's AST for `use` declarations and load the referenced modules.

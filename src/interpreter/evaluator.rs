@@ -41,15 +41,13 @@ pub fn evaluate_program_rc(
     output: &mut dyn std::io::Write,
 ) -> Result<Value, LegibleError> {
     // First pass: register all declarations
-    if let NodeKind::Program { ref statements } = arena_rc.get(root).kind.clone() {
+    if let NodeKind::Program { statements } = &arena_rc.get(root).kind {
         for &stmt_id in statements {
             register_declaration(arena_rc, stmt_id, env)?;
         }
 
         // Look for main()
-        let has_main = env.borrow().get("main").is_some();
-        if has_main {
-            let main_val = env.borrow().get("main").unwrap().0;
+        if let Some((main_val, _)) = env.borrow().get("main") {
             if let Value::Function(callable) = main_val {
                 return call_function(&callable, &[], env, output);
             }
@@ -76,7 +74,7 @@ fn register_declaration(
     node_id: NodeId,
     env: &Env,
 ) -> Result<(), LegibleError> {
-    match &arena_rc.get(node_id).kind.clone() {
+    match &arena_rc.get(node_id).kind {
         NodeKind::FunctionDecl {
             name,
             params,
@@ -152,6 +150,45 @@ fn eval_node(
             iterable,
             body,
         } => {
+            // The ordinary `range` builtin returns a list for compatibility,
+            // but a for-loop need not materialize that list. This fast path is
+            // enabled only while the name still resolves to the builtin, so a
+            // user-defined `range` keeps ordinary dynamic lookup semantics.
+            if let NodeKind::FunctionCall { callee, arguments } = &arena.get(iterable).kind {
+                if let NodeKind::Identifier(name) = &arena.get(*callee).kind {
+                    if name == "range"
+                        && arguments.len() == 2
+                        // Evaluate only side-effect-free literal bounds here;
+                        // otherwise falling back after evaluating the bounds
+                        // would evaluate a callback or I/O expression twice.
+                        && arguments
+                            .iter()
+                            .all(|id| matches!(arena.get(*id).kind, NodeKind::IntegerLit(_)))
+                        && is_builtin_named(env, "range")
+                    {
+                        let start = eval_expr(arena, arguments[0], env, output)?;
+                        let end = eval_expr(arena, arguments[1], env, output)?;
+                        if let (Value::Integer(start), Value::Integer(end)) = (start, end) {
+                            for item in start..end {
+                                let loop_env = Environment::with_parent(env);
+                                loop_env.borrow_mut().define(
+                                    binding.clone(),
+                                    Value::Integer(item),
+                                    false,
+                                );
+                                for &stmt_id in &body {
+                                    match eval_node(arena, stmt_id, &loop_env, output)? {
+                                        EvalSignal::Return(v) => return Ok(EvalSignal::Return(v)),
+                                        EvalSignal::Value(_) => {}
+                                    }
+                                }
+                            }
+                            return Ok(EvalSignal::Value(Value::None));
+                        }
+                    }
+                }
+            }
+
             let iter_val = eval_expr(arena, iterable, env, output)?;
             if let Value::List(items) = iter_val {
                 for item in items.iter().cloned() {
@@ -243,6 +280,14 @@ fn eval_node(
             Ok(EvalSignal::Value(val))
         }
     }
+}
+
+fn is_builtin_named(env: &Env, expected: &str) -> bool {
+    env.borrow()
+        .inspect(expected, |value, _| {
+            matches!(value, Value::Function(Callable::Builtin { name, .. }) if name == expected)
+        })
+        .unwrap_or(false)
 }
 
 /// Fast path for `set x = append(x, ...)` / `concat(x, ...)` / `put(x, k, v)`.
@@ -373,6 +418,38 @@ fn eval_expr(
     env: &Env,
     output: &mut dyn std::io::Write,
 ) -> Result<Value, LegibleError> {
+    // Literals and identifier loads dominate tight arithmetic loops. Handle
+    // them by reference so the general AST match below does not clone the
+    // entire NodeKind (which may contain vectors and strings) on every read.
+    match &arena.get(node_id).kind {
+        NodeKind::IntegerLit(n) => return Ok(Value::Integer(*n)),
+        NodeKind::DecimalLit(n) => return Ok(Value::Decimal(*n)),
+        NodeKind::BooleanLit(b) => return Ok(Value::Boolean(*b)),
+        NodeKind::NoneLit => return Ok(Value::None),
+        NodeKind::TextLit(s) => return Ok(Value::Text(s.clone())),
+        NodeKind::Identifier(name) => {
+            return match env.borrow().get(name) {
+                Some((val, _)) => Ok(val),
+                None => Err(LegibleError {
+                    code: ErrorCode::UndefinedVariable,
+                    severity: Severity::Error,
+                    location: SourceLocation::unknown(),
+                    message: format!("Undefined variable '{name}'"),
+                    context: String::new(),
+                    suggestion: format!("Define '{name}' with 'let' before using it"),
+                }),
+            };
+        }
+        _ => {}
+    }
+
+    // Function calls are common in loops and pipelines. Keep the argument
+    // NodeId slice borrowed so evaluating a call does not clone its AST vector
+    // before evaluating the arguments.
+    if let NodeKind::FunctionCall { callee, arguments } = &arena.get(node_id).kind {
+        return eval_function_call(arena, *callee, arguments, env, output);
+    }
+
     let node = arena.get(node_id).kind.clone();
     match node {
         NodeKind::IntegerLit(n) => Ok(Value::Integer(n)),
@@ -730,6 +807,48 @@ fn eval_expr(
         _ => Err(runtime_error(
             &format!("Cannot evaluate node: {:?}", arena.get(node_id).kind),
             "This node type is not supported as an expression",
+        )),
+    }
+}
+
+fn eval_function_call(
+    arena: &Rc<Arena>,
+    callee: NodeId,
+    arguments: &[NodeId],
+    env: &Env,
+    output: &mut dyn std::io::Write,
+) -> Result<Value, LegibleError> {
+    let mut args = Vec::with_capacity(arguments.len());
+    for &arg_id in arguments {
+        args.push(eval_expr(arena, arg_id, env, output)?);
+    }
+
+    if let NodeKind::Identifier(name) = &arena.get(callee).kind {
+        if name == "print" {
+            if let Some(val) = args.first() {
+                writeln!(output, "{val}").map_err(|e| {
+                    runtime_error(&format!("Write error: {e}"), "Check output stream")
+                })?;
+            }
+            return Ok(Value::None);
+        }
+        match name.as_str() {
+            "filter" => return eval_filter(arena, &args, env, output),
+            "map" => return eval_map(arena, &args, env, output),
+            "reduce" => return eval_reduce(arena, &args, env, output),
+            "sort_by" => return eval_sort_by(arena, &args, env, output),
+            "take" => return eval_take(&args),
+            "drop" => return eval_drop(&args),
+            "find" => return eval_find(arena, &args, env, output),
+            _ => {}
+        }
+    }
+
+    match eval_expr(arena, callee, env, output)? {
+        Value::Function(callable) => call_function(&callable, &args, env, output),
+        _ => Err(runtime_error(
+            "Attempted to call a non-function value",
+            "Ensure the callee is a function",
         )),
     }
 }
