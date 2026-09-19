@@ -36,7 +36,8 @@ legible-lang/
 │   │   ├── mod.rs
 │   │   ├── typechecker.rs      # Type checking pass
 │   │   ├── intent.rs           # Intent-vs-code verification
-│   │   └── contracts.rs        # Pre/post condition instrumentation
+│   │   ├── contracts.rs        # Pre/post condition instrumentation + comprehension-budget check
+│   │   └── complexity.rs       # Comprehension-budget metrics (Halstead, McCabe, Campbell, live bindings)
 │   ├── interpreter/
 │   │   ├── mod.rs
 │   │   ├── evaluator.rs        # Tree-walking evaluator
@@ -582,7 +583,7 @@ end
 
 Rules:
 - Every function **must** have an `intent:` line as its first body statement.
-- Max **40 lines** per function body (enforced by the analyzer). If exceeded, emit error `E_FUNCTION_TOO_LONG`.
+- Function size is limited by a **comprehension budget**, not a line count (`analyzer/complexity.rs`). Line counts are trivially evaded by packing statements onto long lines, so the analyzer measures the AST on four reformatting-invariant dimensions, each against a published threshold: Halstead volume ≤ 1000 bits (industry guideline), cyclomatic complexity ≤ 10 (McCabe 1976; NIST SP 500-235), cognitive complexity ≤ 15 (Campbell 2018), and peak simultaneously-live bindings ≤ 9 (Miller 1956's 7±2 upper bound; Conte, Dunsmore & Shen 1986). Parameters count as live bindings. Exceeding any one emits `E_FUNCTION_TOO_LONG`, naming the dimension, the raw measurement and the fix.
 - Return type is always explicit.
 - No overloading. No default parameters. One signature per function name.
 
