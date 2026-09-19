@@ -38,6 +38,7 @@ pub fn register_bytes_builtins(env: &Env) {
         ("bytes_get", builtin_bytes_get),
         ("bytes_slice", builtin_bytes_slice),
         ("bytes_inflate", builtin_bytes_inflate),
+        ("bytes_crc32", builtin_bytes_crc32),
         ("bytes_to_text", builtin_bytes_to_text),
         ("bytes_read_u32_le", builtin_bytes_read_u32_le),
         ("bytes_read_u16_le", builtin_bytes_read_u16_le),
@@ -318,6 +319,30 @@ fn builtin_bytes_slice(args: &[Value]) -> Result<Value, LegibleError> {
             })
     })?;
     store_buffer(slice)
+}
+
+/// `bytes_crc32(handle: integer, start: integer, count: integer): integer`
+///
+/// Returns the CRC-32 (IEEE, as used by ZIP and PNG) of `count` bytes starting
+/// at `start`, as a non-negative integer in `0..=0xFFFF_FFFF`.
+fn builtin_bytes_crc32(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_crc32", 3)?;
+    let handle = expect_integer(args, 0, "bytes_crc32")?;
+    let start = nonnegative_index(expect_integer(args, 1, "bytes_crc32")?, "bytes_crc32")?;
+    let count = nonnegative_index(expect_integer(args, 2, "bytes_crc32")?, "bytes_crc32")?;
+    with_buffer(handle, |buffer| {
+        let out_of_bounds = || {
+            bytes_error(
+                "bytes_crc32() range is out of bounds",
+                "Use a range within the buffer",
+            )
+        };
+        let end = start.checked_add(count).ok_or_else(out_of_bounds)?;
+        let part = buffer.get(start..end).ok_or_else(out_of_bounds)?;
+        let mut crc = flate2::Crc::new();
+        crc.update(part);
+        Ok(Value::Integer(i64::from(crc.sum())))
+    })
 }
 
 /// `bytes_inflate(source_handle: integer, expected_size: integer): integer`
@@ -713,5 +738,57 @@ mod tests {
     fn rejects_truncated_or_garbage_inflate_stream() {
         assert!(inflate(vec![0xcb, 0x4d], 8).is_err());
         assert!(inflate(vec![0xff, 0xff, 0xff], 0).is_err());
+    }
+
+    fn crc32(input: &[u8], start: i64, count: i64) -> Result<i64, LegibleError> {
+        let Value::Integer(handle) = store_buffer(input.to_vec())? else {
+            unreachable!("byte buffers use integer handles");
+        };
+        let result = builtin_bytes_crc32(&[
+            Value::Integer(handle),
+            Value::Integer(start),
+            Value::Integer(count),
+        ]);
+        match result? {
+            Value::Integer(value) => Ok(value),
+            _ => unreachable!("bytes_crc32 returns an integer"),
+        }
+    }
+
+    #[test]
+    fn crc32_matches_standard_check_value() {
+        assert_eq!(crc32(b"123456789", 0, 9).unwrap(), 0xCBF4_3926);
+    }
+
+    #[test]
+    fn crc32_of_empty_range_is_zero() {
+        assert_eq!(crc32(b"123456789", 4, 0).unwrap(), 0);
+        assert_eq!(crc32(b"123456789", 9, 0).unwrap(), 0);
+        assert_eq!(crc32(b"", 0, 0).unwrap(), 0);
+    }
+
+    #[test]
+    fn crc32_covers_only_the_requested_sub_range() {
+        assert_eq!(
+            crc32(b"xx123456789yy", 2, 9).unwrap(),
+            crc32(b"123456789", 0, 9).unwrap()
+        );
+        assert_ne!(crc32(b"123456789", 1, 8).unwrap(), 0xCBF4_3926);
+    }
+
+    #[test]
+    fn crc32_result_is_never_negative() {
+        let value = crc32(&[0xff; 64], 0, 64).unwrap();
+        assert!((0..=0xFFFF_FFFF).contains(&value));
+    }
+
+    #[test]
+    fn crc32_rejects_out_of_bounds_and_negative_ranges() {
+        assert!(crc32(b"abc", 0, 4).is_err());
+        assert!(crc32(b"abc", 4, 0).is_err());
+        assert!(crc32(b"abc", 2, 2).is_err());
+        assert!(crc32(b"abc", i64::MAX, i64::MAX).is_err());
+        assert!(crc32(b"abc", -1, 2).is_err());
+        assert!(crc32(b"abc", 0, -1).is_err());
     }
 }

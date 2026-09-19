@@ -474,6 +474,22 @@ fn builtin_replace(args: &[Value]) -> Result<Value, LegibleError> {
     }
 }
 
+/// Slice `length` characters starting at character index `start`, clamping
+/// to the end of the text. Indexing is by character, but the scan is a single
+/// allocation-free pass, and pure-ASCII prefixes (the common case for parsers
+/// that step through text one position at a time) index bytes directly.
+fn char_slice(s: &str, start: usize, length: usize) -> &str {
+    let bytes = s.as_bytes();
+    let end = start.saturating_add(length).min(bytes.len());
+    if bytes[..end].is_ascii() {
+        return &s[start.min(end)..end];
+    }
+    let mut indices = s.char_indices().map(|(offset, _)| offset).chain(std::iter::once(s.len()));
+    let from = indices.by_ref().nth(start).unwrap_or(s.len());
+    let to = if length == 0 { from } else { indices.nth(length - 1).unwrap_or(s.len()) };
+    &s[from..to]
+}
+
 fn builtin_substring(args: &[Value]) -> Result<Value, LegibleError> {
     if args.len() != 3 {
         return Err(builtin_error("substring() expects 3 arguments", "Usage: substring(str, start, length)"));
@@ -482,11 +498,7 @@ fn builtin_substring(args: &[Value]) -> Result<Value, LegibleError> {
         (Value::Text(s), Value::Integer(start), Value::Integer(length)) => {
             let start = *start as usize;
             let length = *length as usize;
-            let chars: Vec<char> = s.chars().collect();
-            let end = (start + length).min(chars.len());
-            let start = start.min(chars.len());
-            let result: String = chars[start..end].iter().collect();
-            Ok(Value::Text(result))
+            Ok(Value::Text(char_slice(s, start, length).to_string()))
         }
         _ => Err(builtin_error("substring() expects text, integer, integer", "Pass text and two integers")),
     }
