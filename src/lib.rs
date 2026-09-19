@@ -82,6 +82,8 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
         return Err(contract_errors.into_iter().next().unwrap());
     }
 
+    check_types(&arena, root, source, filename)?;
+
     // Intent verification (warnings only)
     let intent_warnings = analyzer::intent::verify_intents(&arena, root);
     for warning in &intent_warnings {
@@ -104,6 +106,29 @@ pub fn run_source_with_filename(source: &str, filename: &str) -> Result<String, 
     let mut output = Vec::new();
     interpreter::evaluate_program_rc(&arena_rc, root, &env, &mut output)?;
     Ok(String::from_utf8_lossy(&output).to_string())
+}
+
+/// Type check a parsed program, emitting every diagnostic as JSON on stderr.
+///
+/// Returns the first error when there is one. Warnings (such as an optional
+/// used without being unwrapped) are emitted but do not stop the program.
+fn check_types(
+    arena: &parser::arena::Arena,
+    root: parser::ast::NodeId,
+    source: &str,
+    filename: &str,
+) -> Result<(), LegibleError> {
+    let diagnostics = analyzer::typechecker::typecheck(arena, root, source, filename);
+    for diagnostic in &diagnostics {
+        diagnostic.emit_json();
+    }
+    match diagnostics
+        .into_iter()
+        .find(|d| matches!(d.severity, errors::Severity::Error))
+    {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
 }
 
 /// Run a Legible source string with streaming output to the given writer.
@@ -132,6 +157,8 @@ pub fn run_source_streaming(
     {
         return Err(contract_errors.into_iter().next().unwrap());
     }
+
+    check_types(&arena, root, source, filename)?;
 
     // Intent verification (warnings only)
     let intent_warnings = analyzer::intent::verify_intents(&arena, root);
@@ -302,7 +329,7 @@ fn register_module_declaration(
 /// 1. `base_dir/module_name.lbl` (same directory)
 /// 2. `base_dir/lib/module_name.lbl` (lib subdirectory)
 /// 3. `base_dir/../lib/module_name.lbl` (sibling lib directory)
-fn find_module_file(module_name: &str, base_dir: &Path) -> Result<PathBuf, LegibleError> {
+pub(crate) fn find_module_file(module_name: &str, base_dir: &Path) -> Result<PathBuf, LegibleError> {
     let candidates = [
         base_dir.join(format!("{module_name}.lbl")),
         base_dir.join("lib").join(format!("{module_name}.lbl")),

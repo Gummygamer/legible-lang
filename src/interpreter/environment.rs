@@ -35,6 +35,11 @@ impl Environment {
         }))
     }
 
+    /// Names bound directly in this scope (not its parents), in no particular order.
+    pub fn binding_names(&self) -> Vec<String> {
+        self.bindings.keys().cloned().collect()
+    }
+
     /// Define a new binding in this scope.
     pub fn define(&mut self, name: String, value: Value, mutable: bool) {
         self.bindings.insert(name, (value, mutable));

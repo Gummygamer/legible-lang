@@ -99,14 +99,16 @@ fn cmd_check(file: &str) {
 
     let arena = &parser.arena;
 
-    let type_errors = legible_lang::analyzer::typechecker::typecheck(arena, root);
+    let type_errors = legible_lang::analyzer::typechecker::typecheck(arena, root, &source, file);
     let contract_errors = legible_lang::analyzer::contracts::check_contracts(arena, root, &source);
     let intent_warnings = legible_lang::analyzer::intent::verify_intents(arena, root);
 
     let mut has_errors = false;
     for err in type_errors.iter().chain(contract_errors.iter()) {
         err.emit_json();
-        has_errors = true;
+        if matches!(err.severity, legible_lang::errors::Severity::Error) {
+            has_errors = true;
+        }
     }
     for warning in &intent_warnings {
         warning.emit_json();

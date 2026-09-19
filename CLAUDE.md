@@ -34,7 +34,8 @@ legible-lang/
 │   │   └── parser.rs           # Recursive descent parser
 │   ├── analyzer/
 │   │   ├── mod.rs
-│   │   ├── typechecker.rs      # Type checking pass
+│   │   ├── typechecker.rs      # Gradual type checking pass (see "Type checker" below)
+│   │   ├── builtin_signatures.rs # Type signatures of every builtin, in a compact notation
 │   │   ├── intent.rs           # Intent-vs-code verification
 │   │   ├── contracts.rs        # Pre/post condition instrumentation + comprehension-budget check
 │   │   └── complexity.rs       # Comprehension-budget metrics (Halstead, McCabe, Campbell, live bindings)
@@ -91,6 +92,18 @@ Keep dependencies minimal. Approved crates:
 | `criterion`  | Benchmarking (dev-dependency)             |
 
 Do **not** add runtime dependencies beyond these without justification. No async runtime. No allocator crates. Keep the binary lean.
+
+### Type checker
+
+`analyzer/typechecker.rs` runs before evaluation in `legible run` (errors stop the program, warnings are printed) and in `legible check`. It is *gradual*: a value the runtime treats dynamically has the type `any`, which is compatible with everything, so only definite conflicts are reported.
+
+- **Reports:** `E_TYPE_MISMATCH` (declarations, arguments, returns, operators, arity, record fields, branches), `E_UNDEFINED_VARIABLE`, `E_UNDEFINED_FUNCTION` (with a "did you mean" suggestion), `E_IMMUTABLE_REASSIGN`, `E_EXHAUSTIVENESS`, `E_DUPLICATE_DEFINITION`, `E_IMPORT_NOT_FOUND`. Every diagnostic carries a `suggestion`.
+- **Optionals:** a plain value fits an `an optional T` slot; an optional does not fit a plain slot. Using an optional where the plain value is needed (typically `get(list, index)`) is a **warning**, because it works whenever the value is present. The bare `none` literal in a non-optional slot is an error.
+- **JSON objects:** Legible has no JSON-object type, so `a mapping from text to text` is the conventional type of decoded JSON and database rows, and programs store numbers and lists in it. Its values are therefore typed `any`. Mapping literals with mixed value types are also typed as mappings to `any`.
+- **Numbers:** there is no implicit `integer`/`decimal` conversion in declarations, arguments or returns. Arithmetic and comparison between the two is accepted because the runtime defines it; `%` needs integers.
+- **Modules:** `use` declarations are resolved with the same search path as the runtime, and the checker reads each module's public function signatures and record/union types. Module bodies are checked when that module is checked directly.
+- **Builtins:** `builtin_signatures.rs` lists a signature for every registered builtin. `tests/typechecker.rs` fails if a builtin is registered without one, so adding a builtin means adding its signature. `get`, `to_integer` and `to_decimal` have result types the notation cannot express and are special-cased in the checker.
+- **`and` / `or` short-circuit:** the right operand is not evaluated when the left one decides the result, so `has_key(m, k) and get(m, k) == v` is a safe guard.
 
 ### Optional Frida feature
 
@@ -1128,6 +1141,7 @@ Current fixture coverage in `tests/fixtures/valid/`:
 | `mappings`    | Mapping literal, has_key, get, put, keys      |
 | `optionals`   | find, is_some, is_none, unwrap_or             |
 | `text_ops`    | contains_text, replace, substring, split/join |
+| `short_circuit` | `and` / `or` skip the right operand when decided |
 
 For error fixtures, assert that `run_source` returns `Err`. Avoid HTTP/DB fixtures in CI since they require live infrastructure.
 
