@@ -152,6 +152,7 @@ pub const BUILTIN_SIGNATURES: &[(&str, &str)] = &[
     ("bytes_set", "(Integer, Integer, Integer) -> Boolean"),
     ("bytes_fill", "(Integer, Integer, Integer, Integer) -> Boolean"),
     ("bytes_write_bytes", "(Integer, Integer, Integer) -> Any"),
+    ("bytes_write_text", "(Integer, Integer, Text) -> Integer"),
     ("bytes_write_u32_le", "(Integer, Integer, Integer) -> Boolean"),
     ("bytes_index_of", "(Integer, Text, Integer) -> Integer"),
     ("bytes_scan_words", "(Integer, Integer, Integer, Integer, Integer) -> List<Integer>"),

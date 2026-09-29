@@ -45,6 +45,7 @@ pub fn register_bytes_builtins(env: &Env) {
         ("bytes_set", builtin_bytes_set),
         ("bytes_fill", builtin_bytes_fill),
         ("bytes_write_bytes", builtin_bytes_write_bytes),
+        ("bytes_write_text", builtin_bytes_write_text),
         ("bytes_write_u32_le", builtin_bytes_write_u32_le),
         ("bytes_index_of", builtin_bytes_index_of),
         ("bytes_scan_words", builtin_bytes_scan_words),
@@ -511,6 +512,33 @@ fn builtin_bytes_write_bytes(args: &[Value]) -> Result<Value, LegibleError> {
         })?;
         target.copy_from_slice(&source_bytes);
         Ok(Value::Integer(source_bytes.len() as i64))
+    })
+}
+
+/// `bytes_write_text(dest: integer, offset: integer, text: text): integer`
+fn builtin_bytes_write_text(args: &[Value]) -> Result<Value, LegibleError> {
+    require_arity(args, "bytes_write_text", 3)?;
+    let destination = expect_integer(args, 0, "bytes_write_text")?;
+    let offset = nonnegative_index(
+        expect_integer(args, 1, "bytes_write_text")?,
+        "bytes_write_text",
+    )?;
+    let source = expect_text(args, 2, "bytes_write_text")?.as_bytes();
+    with_buffer_mut(destination, |buffer| {
+        let end = offset.checked_add(source.len()).ok_or_else(|| {
+            bytes_error(
+                "bytes_write_text() range is out of bounds",
+                "Ensure the text fits within the destination buffer",
+            )
+        })?;
+        let target = buffer.get_mut(offset..end).ok_or_else(|| {
+            bytes_error(
+                "bytes_write_text() range is out of bounds",
+                "Ensure the text fits within the destination buffer",
+            )
+        })?;
+        target.copy_from_slice(source);
+        Ok(Value::Integer(source.len() as i64))
     })
 }
 
